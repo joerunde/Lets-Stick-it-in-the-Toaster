@@ -1,0 +1,8 @@
+As this was an experiment in  single-file, non-OOP coding, the source code is all in a single file, named source.txt. Open if you dare.
+
+The executables are 'Toaster no starting guns.exe' for a challenge and 'Toaster with unlocks.exe' for a casual run-through.
+
+--Game Instructions
+Standard FPS controls- mouse to aim/shoot, WASD to move.
+Right click switches weapons, holding E completes objectives, and middle mouse detonates explosives.
+Find and collect all the parts to fix the helicopter to win. 
