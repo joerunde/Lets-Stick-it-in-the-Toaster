@@ -1,0 +1,8 @@
+# Exported from DeleD's Wavefront OBJ Exporter 1.0
+# Visit http://www.delgine.com for more information.
+newmtl blueish (2)
+map_Kd blueish.bmp
+newmtl blackish (2)
+map_Kd blackish.bmp
+newmtl Red (2)
+map_Kd Red.jpg

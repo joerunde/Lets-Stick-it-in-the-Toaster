@@ -1,0 +1,14 @@
+# Exported from DeleD's Wavefront OBJ Exporter 1.0
+# Visit http://www.delgine.com for more information.
+newmtl shutorange
+map_Kd shutorange.JPG
+newmtl grey3
+map_Kd grey3.jpg
+newmtl bronze
+map_Kd bronze.jpg
+newmtl cammo
+map_Kd cammo.bmp
+newmtl interior
+map_Kd interior.jpg
+newmtl blackish
+map_Kd blackish.bmp

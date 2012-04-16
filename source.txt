@@ -1,0 +1,2878 @@
+# include<iostream>
+# include<iomanip>
+# include<math.h>
+# include<time.h>
+# include<windows.h>
+# include<string.h>
+# include<string>
+# include<irrlicht.h>
+#include <irrKlang.h>
+#pragma comment(lib,"irrlicht.lib")
+#pragma comment(lib,"irrKlang.lib")
+
+#define PI 3.141592653f
+
+using namespace irr;
+using namespace core;
+using namespace scene;
+using namespace video;
+using namespace io;
+using namespace gui;
+using namespace irrklang;
+using namespace std;
+
+enum
+{ 
+	Is_Walking,
+	Is_Attacking,
+	Is_Being_Attacked,
+	Is_Dead,
+	Is_Special_Attacking,
+	Animation_Number,  
+};
+
+enum
+{
+	PISTOL,
+	UZI,
+	SHOTGUN,
+	BARREL,
+	GRENADE,
+	FAKEWALL,
+	CLAYMORE,
+	ROCKET,
+	CHARGE,
+	RAILGUN,
+	TOTAL_GUNS,
+	DEVIL,
+};
+enum
+{
+	NOT_ACTIVE,
+	ACTIVE,
+	DOING,
+	COMPLETED,
+};
+enum
+{
+	TUTORIAL,
+	//FIND_BLUEPRINTS,
+	HAMMER_NAILS,
+	RETURN_HN,
+	STEAL_FRIDGE,
+	ASSEMBLE_CHASIS,
+	STEAL_ENGINE,
+	ASSEMBLE_ENGINE,
+	STEAL_TUB,
+	GET_GAS,
+	RETURN_TUB,
+	STEAL_VACUUM,
+	ASSEMBLE_FUEL_PUMP,
+	STEAL_STAND,
+	ATTACH_WHEELS,
+	STEAL_BED,
+	RETURN_BED,
+	STEAL_SHUTTERS,
+	ASSEMBLE_PROP,
+	STEAL_GATE,
+	ATTACH_ROTOR,
+	STEAL_CONTROL,
+	INSTALL_CONTROL,
+	CRANK_UP,
+	TAKE_OFF,
+};
+class Cevents
+{
+public:
+	int state, messagenum, steps, possloc;
+	bool complete[10];
+	float range, time;
+	vector3df eventpos[10];
+	IAnimatedMeshSceneNode *Eventnode[10];
+};
+class Cexplosion
+{
+public:
+	int subs, state;
+	float damage, range, anitime, dettime;
+	IBillboardSceneNode *Explodenode;
+	ILightSceneNode *Elight;
+};
+class Cenemy
+{
+public:
+	bool devil, animation[Animation_Number], dpcheck;
+	f32 anitime;
+	float health, cooldown, hitcool, movespeed;
+	vector3df heading, hitheading, bodyrotation;
+	IAnimatedMeshSceneNode *Bodynode, *Headnode, *Footlnode, *Footrnode, *Armlnode, *Armrnode;
+	ILightSceneNode *redeye;
+	int level;
+};
+class Cgun
+{
+public:
+	std::string gunname;
+	bool unlocked;
+	float cooldown, firetimer, range, damage;
+	IAnimatedMeshSceneNode *Gunnode;
+	int ammo, gunnum, maxammo; 
+};
+
+class Cbullet
+{
+public:
+	bool hit;
+	int gorigin, hitnum, hitpart;
+	float velocity, range, damage, timer;
+	f32 oldfdt;
+	vector3df heading, oldpos;
+	IAnimatedMeshSceneNode *Bulletnode;
+	IAnimatedMeshSceneNode *Locketnode;
+	IAnimatedMeshSceneNode *Devilnode;
+};
+
+class Cmine
+{
+public:
+	int gorigin, state, subs;
+	float timer, dettime, damage, range;
+	IAnimatedMeshSceneNode *Minenode;
+	ILightSceneNode *blink;
+};
+
+enum
+{
+	INACTIVE,
+	PLACED,
+	TRIGGERED,
+	EXPLODED,
+	EXPLODING,
+	WAITING,
+	DRAWING,
+};
+
+class Cplayer
+{
+public:
+	int active_gun, level;
+	float health, deathtimer, invulntimer, ass_kick_timer;
+	bool invuln, is_getting_ass_kicked;
+	vector3df ass_kick;
+	IAnimatedMeshSceneNode *Playernode;
+};
+
+class Cdeathpack
+{
+public:
+	int state, gorigin;
+	IAnimatedMeshSceneNode *packnode;
+	float timer;
+};
+
+class Cheadup
+{
+public: 
+	std::string text;
+	float timer;
+	bool mission;
+};
+
+int playersetup(Cplayer &player);
+Cgun gunsetup(Cgun gun[]);
+int Createbullet(Cbullet &bullet, Cgun &gun, Cplayer, ICameraSceneNode* bcamera);
+Cenemy hitcheck(Cbullet &bullet, Cenemy enemy[], Cmine barrel[], Cmine fakewall[], int &zarg, int &zargnum, Cexplosion &explosion, int &explodenum, ICameraSceneNode* Camera, f32 frameps, Cplayer &player, int &killcount);
+int spawn(Cenemy &spawnee, Cenemy others[], vector3df spawns[]);
+void update(Cenemy updatee, f32 FDT);
+void rotate(Cenemy &rTank, f32 timediff, float angleRotation);
+void separate(Cenemy &sepZombie, Cenemy otherzombie, float maxrotsep, float maxsep, float sepdist, f32 sepfdt);
+void center(Cenemy &cenZombie, vector3df apos, float maxrotcen, f32 cenfdt);
+void animate(Cenemy &azombie, f32 frameDeltaTime, Cplayer &player, ICameraSceneNode* Camera, Cgun gun[], Cdeathpack &pack, int &pcount);
+void enemysetup(Cenemy &senemy);
+Cenemy attackcheck(Cenemy enemy[], ICameraSceneNode* Camera);
+void attackhitcheck(Cenemy enemy, Cplayer &player, ICameraSceneNode* Camera);
+Cmine minetriggercheck(Cenemy enemy[], Cmine mine[], Cplayer player, Cexplosion &explosion, f32 framedt, int &expcount);
+Cmine claymoresetup(Cmine clay[], IAnimatedMesh* claymesh, ISceneManager* smgr);
+Cmine chargesetup(Cmine charges[], IAnimatedMesh* chargemesh, ISceneManager* smgr);
+Cmine barrelsetup(Cmine barrel[], IAnimatedMesh* barrelmesh, ISceneManager* smgr);
+Cmine wallsetup(Cmine wallfake[], IAnimatedMesh* wallfakemesh, ISceneManager* smgr);
+void createmine(Cmine &mine, Cplayer player, Cgun &gun, ICameraSceneNode* Camera);
+Cenemy explosioncheck(Cenemy enemy[], Cplayer &player, Cexplosion &explosion, ICameraSceneNode* Camera, int &killcount);
+void createexplosion(Cexplosion &explosion, vector3df position, float damage, int subs, float range);
+Cmine explosioncheckwall(Cmine wall[], Cexplosion &explosion, ICameraSceneNode* Camera);
+Cmine explosioncheckbarrel(Cmine barrel[], Cexplosion &explosion, Cexplosion &newexplosion, Cplayer player, ICameraSceneNode* Camera, int &expcount);
+Cdeathpack setupdeathpacks(Cdeathpack pack[], ISceneManager* smgr);
+Cgun collectdeathpack(Cplayer &player, Cdeathpack &pack, Cgun gun[], ICameraSceneNode* Camera, Cheadup &headup);
+void createdeathpack(Cenemy enemy, Cdeathpack &pack, Cgun gun[]);
+void ammocounter(int ammo, ITexture* numbers[], IVideoDriver* driver, int height, int killcount, float kktimer, int hp, int width, float actiontime, float actionlength);
+void devilattackcheck(Cenemy &devil, Cmine mine[], Cmine fakewall[], ICameraSceneNode* Camera, f32 fdt);
+Cevents eventsetup(Cevents events[]);
+void eventcheck(Cevents &check, ICameraSceneNode* Camera, float &actiontime, int &gamestep, Cplayer player, f32 fdt);
+
+
+enum
+{
+	ID_IsNotPickable,
+};
+enum
+{
+	BLAST_ZONE,
+	BURN,
+	DARKNESS,
+	HEARTBEAT,
+	MEATGRINDER,
+	ON_THE_JOB,
+	OUTBREAK,
+	ROADKILL,
+};
+
+int main()
+{
+	Cplayer player;
+	player.level = 0;
+	int c, k, bulletcounter = 0, minecounter = 0, chargecounter = 0, barrelcounter = 0, wallcounter = 0, explosioncounter = 0, dpcounter = 0, i, main_zarg, main_zargnum, killcount = 0, oldkillcount = killcount;
+	vector3df bulletpos, spawnz[4], camheading, ssheading;
+	float kktimer = 2;
+	playersetup(player);
+	Cgun gun[10];
+	gunsetup(gun);
+	Cbullet bullet[200];
+	Cenemy zombies[200];
+	Cevents events[200];
+	int gamestep = 0, oldgamestep = -1, spawnlevel = 1;
+	float actiontime = 0, frametimer = 0, songtimer = 0;
+	int songplaying = 0, playcount = 0, devilchance = 2;
+	float songlength[8], zombietimer = 0, zpause = 2;
+	bool songplayed[8], gamestart = false;
+	for(c=0;c<8;c++)
+		songplayed[c] = false;
+	songlength[BLAST_ZONE] = 156;
+	songlength[BURN] = 128;
+	songlength[DARKNESS] = 106;
+	songlength[HEARTBEAT] = 175;
+	songlength[MEATGRINDER] = 132;
+	songlength[ON_THE_JOB] = 220;
+	songlength[OUTBREAK] = 134;
+	songlength[ROADKILL] = 168;
+
+	eventsetup(events);
+
+
+	srand((UINT)time (NULL));
+
+	songplaying = rand()% 8;
+	songplayed[songplaying] = true;
+	playcount += 1;
+
+	//creates Irrlicht driver, device, and scene manager
+	E_DRIVER_TYPE driverType;
+	driverType = EDT_OPENGL;
+	int swid = 1200, shei = 800;
+	//int swid = 400, shei = 300;
+	IrrlichtDevice* device = createDevice(driverType, dimension2d<u32>(swid, shei));
+	IVideoDriver* driver = device->getVideoDriver();
+	ISceneManager* smgr = device->getSceneManager();
+	ISoundEngine* engine = createIrrKlangDevice();
+
+	Cheadup headup;
+	Cmine mines[200];
+		IAnimatedMesh* claymore = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/claymore.obj");
+		claymoresetup(mines, claymore, smgr);
+	Cmine charges[200];
+		IAnimatedMesh* charge = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/chargepack.obj");
+		chargesetup(charges, charge, smgr);
+	Cmine barrels[200];
+		IAnimatedMesh* barrel = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/barrel.obj");
+		barrelsetup(barrels, barrel, smgr);
+	Cmine fakewalls[200];
+		IAnimatedMesh* fakewall = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/fakewall.obj");
+		wallsetup(fakewalls, fakewall, smgr);
+	Cexplosion explosions[200];
+	ITexture *exptext = driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/asplosion2.png");
+	driver->makeColorKeyTexture(exptext, core::position2d<s32>(0,0));
+	for(c = 0; c <200; c++)
+	{
+		explosions[c].state = INACTIVE;
+		explosions[c].Explodenode = smgr->addBillboardSceneNode(0, dimension2d<f32>(10,10), vector3df(0,0,0), -1, 4294967295U, 4294967295U);
+		explosions[c].Explodenode->setMaterialType(EMT_TRANSPARENT_ALPHA_CHANNEL);
+		explosions[c].Explodenode->setMaterialTexture(0, exptext);
+		explosions[c].Explodenode->setVisible(false);
+		explosions[c].Elight = smgr->addLightSceneNode(explosions[c].Explodenode, vector3df(0,100,0), SColorf(1.f, 1.f, 1.f), 0.f);
+	}
+	Cdeathpack deathpacks[200];
+	setupdeathpacks(deathpacks, smgr);
+  
+	//creates floor
+	IAnimatedMesh* floormesh = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/scene.obj");
+	IAnimatedMeshSceneNode* floornode = smgr->addAnimatedMeshSceneNode(floormesh,0,-1,vector3df(0,-2,0));
+
+	IAnimatedMesh* bulletmesh = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/bullet6.obj");
+	IAnimatedMesh* locketmesh = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/rocketz.obj");
+	IAnimatedMesh* devilshotmesh = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/rocketz.obj");
+	IAnimatedMesh* bodymesh = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/zombiebody.obj");
+	IAnimatedMesh* headmesh = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/zombiehead.obj");
+	IAnimatedMesh* armrmesh = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/zombiearmr.obj");
+	IAnimatedMesh* armlmesh = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/zombiearml.obj");
+	IAnimatedMesh* footrmesh = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/zombiefootr.obj");
+	IAnimatedMesh* footlmesh = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/zombiefootl.obj");
+	IAnimatedMesh* dbodymesh = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/dbody.obj");
+	IAnimatedMesh* dheadmesh = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/dhead.obj");
+	IAnimatedMesh* darmrmesh = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/darmr.obj");
+	IAnimatedMesh* darmlmesh = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/darml.obj");
+	IAnimatedMesh* dfootrmesh = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/dfootr.obj");
+	IAnimatedMesh* dfootlmesh = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/dfootl.obj");
+	IAnimatedMesh* roofmesh = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/roofs.obj");
+	IAnimatedMeshSceneNode *Roofnode = smgr->addAnimatedMeshSceneNode(roofmesh,0,-1, vector3df(0,2,0));
+
+	ITexture* crosshair = driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/crosshair.png");
+	driver->makeColorKeyTexture(crosshair, core::position2d<s32>(0,0));
+	ITexture* ammo      = driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/ammo3.png");
+	driver->makeColorKeyTexture(ammo, core::position2d<s32>(0,0));
+	ITexture* hp        = driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/hp.png");
+	driver->makeColorKeyTexture(hp, core::position2d<s32>(0,0));
+	ITexture* hud       = driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/hud2.png");
+	driver->makeColorKeyTexture(hud, core::position2d<s32>(0,0));
+	ITexture* skull     = driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/skulls.png");
+	driver->makeColorKeyTexture(skull, core::position2d<s32>(0,0));
+	ITexture* Numbers[10];
+	Numbers[0] = driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/ZERO.png");
+	driver->makeColorKeyTexture(Numbers[0], core::position2d<s32>(0,0));
+	Numbers[1] = driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/ONE.png");
+	driver->makeColorKeyTexture(Numbers[1], core::position2d<s32>(0,0));
+	Numbers[2] = driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/TWO.png");
+	driver->makeColorKeyTexture(Numbers[2], core::position2d<s32>(0,0));
+	Numbers[3] = driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/THREE.png");
+	driver->makeColorKeyTexture(Numbers[3], core::position2d<s32>(0,0));
+	Numbers[4] = driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/FOUR.png");
+	driver->makeColorKeyTexture(Numbers[4], core::position2d<s32>(0,0));
+	Numbers[5] = driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/FIVE.png");
+	driver->makeColorKeyTexture(Numbers[5], core::position2d<s32>(0,0));
+	Numbers[6] = driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/SIX.png");
+	driver->makeColorKeyTexture(Numbers[6], core::position2d<s32>(0,0));
+	Numbers[7] = driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/SEVEN.png");
+	driver->makeColorKeyTexture(Numbers[7], core::position2d<s32>(0,0));
+	Numbers[8] = driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/EIGHT.png");
+	driver->makeColorKeyTexture(Numbers[8], core::position2d<s32>(0,0));
+	Numbers[9] = driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/NINE.png");
+	driver->makeColorKeyTexture(Numbers[9], core::position2d<s32>(0,0));
+	ITexture* DPMessage[10];
+	ITexture* EventMessage[20];
+	ITexture* Splash;
+	Splash = driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/inthetoaster.bmp");
+
+
+	for(c = 0; c < 200; c++)
+	{
+		bullet[c].hit = true;
+		bullet[c].Bulletnode = smgr->addAnimatedMeshSceneNode(bulletmesh,0,-1,vector3df(0,10000,0));
+		bullet[c].Locketnode = smgr->addAnimatedMeshSceneNode(locketmesh,0,-1,vector3df(0,0,0));
+		bullet[c].Locketnode->setParent(bullet[c].Bulletnode);
+		bullet[c].Locketnode->setVisible(false);
+		bullet[c].Devilnode = smgr->addAnimatedMeshSceneNode(devilshotmesh,0,-1,vector3df(0,0,0));
+		bullet[c].Devilnode->setParent(bullet[c].Bulletnode);
+		bullet[c].Devilnode->setVisible(false);
+		bullet[c].timer = 0;
+		zombies[c].Bodynode = smgr-> addAnimatedMeshSceneNode(bodymesh,0,-1,vector3df(0,500,0));
+		zombies[c].Headnode = smgr-> addAnimatedMeshSceneNode(headmesh,zombies[c].Bodynode,-1,vector3df(0,0,0));
+		zombies[c].Armrnode = smgr-> addAnimatedMeshSceneNode(armrmesh,zombies[c].Bodynode,-1,vector3df(0,11,-5));
+		zombies[c].Armlnode = smgr-> addAnimatedMeshSceneNode(armlmesh,zombies[c].Bodynode,-1,vector3df(0,11,-5));
+		zombies[c].Footrnode = smgr->addAnimatedMeshSceneNode(footrmesh,zombies[c].Bodynode,-1,vector3df(0,0,0));
+		zombies[c].Footlnode = smgr->addAnimatedMeshSceneNode(footlmesh,zombies[c].Bodynode,-1,vector3df(0,0,0));
+		zombies[c].redeye = smgr->addLightSceneNode(zombies[c].Bodynode, vector3df(0,27,13), SColorf(1.f, 0.f, 0.f, 1.f), 10.f);
+		enemysetup(zombies[c]);
+	}
+
+	//import gun meshes here
+	IAnimatedMesh* pistol = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/pistol4.obj");
+	IAnimatedMesh* locket = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/rocket_launcher3.obj");
+	IAnimatedMesh* shotgun = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/shotgun4.obj");
+	IAnimatedMesh* uzi = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/uzi3.obj");
+	IAnimatedMesh* claymoregun = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/mine_gun.obj");
+	IAnimatedMesh* barrelgun = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/barrel_gun.obj");
+	IAnimatedMesh* minegun = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/mine_gun.obj");
+	IAnimatedMesh* chargegun = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/chargegun.obj");
+	IAnimatedMesh* fakewallgun = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/fakewallgun.obj");
+	IAnimatedMesh* railgun = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/railgun4.obj");
+
+	gun[PISTOL].Gunnode = smgr->addAnimatedMeshSceneNode(pistol,0,-1,vector3df(0,-20,5));
+	gun[SHOTGUN].Gunnode = smgr->addAnimatedMeshSceneNode(shotgun,0,-1,vector3df(0,-20,5));
+	gun[UZI].Gunnode = smgr->addAnimatedMeshSceneNode(uzi,0,-1,vector3df(0,-20,5));
+	gun[BARREL].Gunnode = smgr->addAnimatedMeshSceneNode(barrelgun,0,-1,vector3df(0,-20,5));
+	gun[GRENADE].Gunnode = smgr->addAnimatedMeshSceneNode(pistol,0,-1,vector3df(0,-20,5));
+	gun[FAKEWALL].Gunnode = smgr->addAnimatedMeshSceneNode(fakewallgun,0,-1,vector3df(0,-20,5));
+	gun[ROCKET].Gunnode = smgr->addAnimatedMeshSceneNode(locket,0,-1,vector3df(0,-20,5));
+	gun[CLAYMORE].Gunnode = smgr->addAnimatedMeshSceneNode(claymoregun,0,-1,vector3df(0,-20,5));
+	gun[RAILGUN].Gunnode = smgr->addAnimatedMeshSceneNode(railgun,0,-1,vector3df(0,-20,5));
+	gun[CHARGE].Gunnode = smgr->addAnimatedMeshSceneNode(chargegun,0,-1,vector3df(0,-20,5));
+	//dfg
+	for(c=0;c<200;c++)
+		for(k=0;k<10;k++)
+		{
+			events[c].Eventnode[k] = smgr->addAnimatedMeshSceneNode(footrmesh,0,-1, vector3df(0,2000,0));
+			events[c].Eventnode[k]->setVisible(false);
+		}
+	IAnimatedMesh* hammernails = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/hammer.obj");
+	events[HAMMER_NAILS].Eventnode[0] = smgr->addAnimatedMeshSceneNode(hammernails,0,-1,vector3df(0,0,0));
+	events[HAMMER_NAILS].Eventnode[0]->setVisible(true);
+	IAnimatedMesh* fridge0 = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/AFRIDGE0.obj");
+	events[STEAL_FRIDGE].Eventnode[0] = smgr->addAnimatedMeshSceneNode(fridge0,0,-1,vector3df(0,0,0));
+	events[STEAL_FRIDGE].Eventnode[0]->setVisible(true);
+	IAnimatedMesh* fridge1 = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/AFRIDGE1.obj");
+	events[STEAL_FRIDGE].Eventnode[1] = smgr->addAnimatedMeshSceneNode(fridge1,0,-1,vector3df(0,0,0));
+	events[STEAL_FRIDGE].Eventnode[1]->setVisible(true);
+	IAnimatedMesh* fridge2 = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/AFRIDGE2.obj");
+	events[STEAL_FRIDGE].Eventnode[2] = smgr->addAnimatedMeshSceneNode(fridge2,0,-1,vector3df(0,0,0));
+	events[STEAL_FRIDGE].Eventnode[2]->setVisible(true);
+	IAnimatedMesh* fridge3 = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/AFRIDGE3.obj");
+	events[STEAL_FRIDGE].Eventnode[3] = smgr->addAnimatedMeshSceneNode(fridge3,0,-1,vector3df(0,0,0));
+	events[STEAL_FRIDGE].Eventnode[3]->setVisible(true);
+	IAnimatedMesh* fridge4 = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/AFRIDGE4.obj");
+	events[STEAL_FRIDGE].Eventnode[4] = smgr->addAnimatedMeshSceneNode(fridge4,0,-1,vector3df(0,0,0));
+	events[STEAL_FRIDGE].Eventnode[4]->setVisible(true);
+	//ENGINES HERE
+	IAnimatedMesh* bathtub = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/bathtub.obj");
+	events[STEAL_TUB].Eventnode[0] = smgr->addAnimatedMeshSceneNode(bathtub,0,-1,vector3df(0,0,0));
+	events[STEAL_TUB].Eventnode[0]->setVisible(true);
+	IAnimatedMesh* vacuum = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/vacuum.obj");
+	events[STEAL_VACUUM].Eventnode[0] = smgr->addAnimatedMeshSceneNode(vacuum,0,-1,vector3df(0,0,0));
+	events[STEAL_VACUUM].Eventnode[0]->setVisible(true);
+	IAnimatedMesh* stand = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/tvstand.obj");
+	events[STEAL_STAND].Eventnode[0] = smgr->addAnimatedMeshSceneNode(stand,0,-1,vector3df(0,0,0));
+	events[STEAL_STAND].Eventnode[0]->setVisible(true);
+	IAnimatedMesh* bed = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/bedposts.obj");
+	events[STEAL_BED].Eventnode[0] = smgr->addAnimatedMeshSceneNode(bed,0,-1,vector3df(0,0,0));
+	events[STEAL_BED].Eventnode[0]->setVisible(true);
+	IAnimatedMesh* shutter0 = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/SHUTTER0.obj");
+	events[STEAL_SHUTTERS].Eventnode[0] = smgr->addAnimatedMeshSceneNode(shutter0,0,-1,vector3df(0,0,0));
+	events[STEAL_SHUTTERS].Eventnode[0]->setVisible(true);
+	IAnimatedMesh* shutter1 = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/SHUTTER1.obj");
+	events[STEAL_SHUTTERS].Eventnode[1] = smgr->addAnimatedMeshSceneNode(shutter1,0,-1,vector3df(0,0,0));
+	events[STEAL_SHUTTERS].Eventnode[1]->setVisible(true);
+	IAnimatedMesh* shutter2 = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/SHUTTER2.obj");
+	events[STEAL_SHUTTERS].Eventnode[2] = smgr->addAnimatedMeshSceneNode(shutter2,0,-1,vector3df(0,0,0));
+	events[STEAL_SHUTTERS].Eventnode[2]->setVisible(true);
+	IAnimatedMesh* shutter3 = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/SHUTTER3.obj");
+	events[STEAL_SHUTTERS].Eventnode[3] = smgr->addAnimatedMeshSceneNode(shutter3,0,-1,vector3df(0,0,0));
+	events[STEAL_SHUTTERS].Eventnode[3]->setVisible(true);
+	IAnimatedMesh* shutter4 = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/SHUTTER4.obj");
+	events[STEAL_SHUTTERS].Eventnode[4] = smgr->addAnimatedMeshSceneNode(shutter4,0,-1,vector3df(0,0,0));
+	events[STEAL_SHUTTERS].Eventnode[4]->setVisible(true);
+	IAnimatedMesh* shutter5 = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/SHUTTER5.obj");
+	events[STEAL_SHUTTERS].Eventnode[5] = smgr->addAnimatedMeshSceneNode(shutter5,0,-1,vector3df(0,0,0));
+	events[STEAL_SHUTTERS].Eventnode[5]->setVisible(true);
+	IAnimatedMesh* shutter6 = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/SHUTTER6.obj");
+	events[STEAL_SHUTTERS].Eventnode[6] = smgr->addAnimatedMeshSceneNode(shutter6,0,-1,vector3df(0,0,0));
+	events[STEAL_SHUTTERS].Eventnode[6]->setVisible(true);
+	IAnimatedMesh* shutter7 = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/SHUTTER7.obj");
+	events[STEAL_SHUTTERS].Eventnode[7] = smgr->addAnimatedMeshSceneNode(shutter7,0,-1,vector3df(0,0,0));
+	events[STEAL_SHUTTERS].Eventnode[7]->setVisible(true);
+	IAnimatedMesh* gate = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/gate.obj");
+	events[STEAL_GATE].Eventnode[0] = smgr->addAnimatedMeshSceneNode(gate,0,-1,vector3df(0,0,0));
+	events[STEAL_GATE].Eventnode[0]->setVisible(true);
+	IAnimatedMesh* control = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/panel.obj");
+	events[STEAL_CONTROL].Eventnode[0] = smgr->addAnimatedMeshSceneNode(control,0,-1,vector3df(0,0,0));
+	events[STEAL_CONTROL].Eventnode[0]->setVisible(true);
+
+			
+
+	//adds lights
+	//smgr->addLightSceneNode(0,vector3df(1000,400,1000),SColorf(1.0f,1.0f,1.0f,1.0f), 1000.0f);
+	//smgr->addLightSceneNode(0,vector3df(1000,400,-1000),SColorf(1.0f,1.0f,1.0f,1.0f), 1000.0f);
+	//smgr->addLightSceneNode(0,vector3df(-1000,400,-1000),SColorf(1.0f,1.0f,1.0f,1.0f), 1000.0f);
+	//smgr->addLightSceneNode(0,vector3df(-1000,400,1000),SColorf(1.0f,1.0f,1.0f,1.0f), 1000.0f);
+	smgr->addLightSceneNode(0,vector3df(-250,210,-170),SColorf(1.0f,1.0f,0.9f,1.0f), 100.0f);
+	smgr->addLightSceneNode(0,vector3df(200,210,350),SColorf(1.0f,1.0f,0.9f,1.0f), 100.0f);
+	smgr->addLightSceneNode(0,vector3df(-250,210,1073),SColorf(1.0f,1.0f,0.9f,1.0f), 100.0f);
+	smgr->addLightSceneNode(0,vector3df(-1420, 210, 2000),SColorf(1.0f,1.0f,0.9f,1.0f), 100.0f);
+	smgr->addLightSceneNode(0,vector3df(-1450, 210, -1550),SColorf(1.0f,1.0f,0.9f,1.0f), 100.0f);
+	smgr->addLightSceneNode(0,vector3df(-2180, 210, -80),SColorf(1.0f,1.0f,0.9f,1.0f), 100.0f);
+	smgr->addLightSceneNode(0,vector3df(-2900, 0, 950),SColorf(1.0f,1.0f,0.9f,1.0f), 100.0f);
+	smgr->addLightSceneNode(0,vector3df(2366, 0, -584),SColorf(1.0f,1.0f,0.9f,1.0f), 100.0f);
+	smgr->addLightSceneNode(0,vector3df(1794, 0, 1460),SColorf(1.0f,1.0f,0.9f,1.0f), 100.0f);
+
+	//adds skybox
+
+	smgr->addSkyBoxSceneNode(
+					driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Starscape.png"),
+					driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Starscape.png"),
+					driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Starscape.png"),
+					driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Starscape.png"),
+					driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Starscape.png"),
+					driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Starscape.png"));
+	
+	/*smgr->addSkyBoxSceneNode(
+					driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Starscape.jpg"),
+					driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Starscape.jpg"),
+					driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Starscape.jpg"),
+					driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Starscape.jpg"),
+					driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Starscape.jpg"),
+					driver->getTexture("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Starscape.jpg"));*/
+
+
+	ITriangleSelector* selector = 0;
+	selector = smgr->createOctreeTriangleSelector(
+									floornode->getMesh(), floornode, 128);
+									floornode->setTriangleSelector(selector);
+
+
+	ICameraSceneNode* camera =
+					smgr->addCameraSceneNodeFPS(0, 100.0f, .2f, ID_IsNotPickable, 0, 0, true, 3.f);
+					camera->setPosition(vector3df(200,100,0));
+					camera->setTarget(core::vector3df(0,500,1000));
+
+	/*gun[PISTOL].Gunnode->setParent(camera);
+	gun[SHOTGUN].Gunnode->setParent(camera);
+	gun[SHOTGUN].Gunnode->setVisible(false);*/
+	for(c = 0; c < TOTAL_GUNS; c++)
+	{
+		gun[c].Gunnode->setParent(camera);
+		gun[c].Gunnode->setVisible(false);
+	}
+
+	scene::ISceneNodeAnimator* anim = smgr->createCollisionResponseAnimator(
+							selector, camera, core::vector3df(15,35,15),
+							core::vector3df(0,-3,0), core::vector3df(0,20,0));
+							camera->addAnimator(anim);
+							anim->drop();
+
+	for(c = 0; c < 200; c++)
+	{
+		ISceneNodeAnimator* anim = smgr->createCollisionResponseAnimator(
+							selector, zombies[c].Bodynode, core::vector3df(20,35,20),
+							core::vector3df(0,0,0), core::vector3df(0,-11,0));
+							zombies[c].Bodynode->addAnimator(anim);
+							anim->drop();
+
+	}
+
+	for(c = 0; c < 200; c++)
+	{
+		ISceneNodeAnimator* anim = smgr->createCollisionResponseAnimator(
+							selector, bullet[c].Bulletnode, core::vector3df(1,1,1),
+							core::vector3df(0,000,0), core::vector3df(0,0,0));
+							bullet[c].Bulletnode->addAnimator(anim);
+							anim->drop();
+
+	}
+							
+							
+	selector->drop();
+	spawnz[0] = vector3df( 300, 10, 300);
+	spawnz[1] = vector3df( 300, 10,-300);
+	spawnz[2] = vector3df(-300, 10, 300);
+	spawnz[3] = vector3df(-300, 10,-300);
+
+	float sdist, tdist;
+	int closest;
+	bool close, sgnpump, is_centering;
+	vector3df tpos1, tpos2, bpos1, bpos2;
+
+	int cheatnum = 0, cheatlevel = 125;
+
+	IGUIFont* font = device->getGUIEnvironment()->getBuiltInFont();
+
+	while(gamestart == false)
+	{
+		driver->beginScene(true, true, video::SColor(255,200,200,200));
+		driver->draw2DImage(Splash, position2d<s32>((swid / 2.f) - (527.f / 2.f), (shei / 2.f) - (294.f / 2.f)),  rect<s32>(0,0,527, 294), 0, SColor(255,255,255,255), true);
+		//driver->draw2DImage(
+		driver->endScene();
+		if (GetAsyncKeyState(0x45))
+			gamestart = true;
+	}
+
+	switch(songplaying)
+			{
+				case BLAST_ZONE:
+					engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Music/Blast Zone.ogg");
+					break;
+				case BURN:
+					engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Music/Burn.ogg");
+					break;
+				case DARKNESS:
+					engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Music/Darkness.ogg");
+					break;
+				case HEARTBEAT:
+					engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Music/Heartbeat.ogg");
+					break;
+				case MEATGRINDER:
+					engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Music/Meatgrinder.ogg");
+					break;
+				case ON_THE_JOB:
+					engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Music/On the Job.ogg");
+					break;
+				case OUTBREAK:
+					engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Music/Outbreak.ogg");
+					break;
+				case ROADKILL:
+					engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Music/Roadkill.ogg");
+					break;
+			}
+
+	device->getCursorControl()->setVisible(false);
+	u32 then = device->getTimer()->getTime();
+	
+	while(device->run())
+	{
+		//CHEAT COOOOOOOOOODE 1337 H4xx0rz
+		if(cheatnum <= cheatlevel)
+		{
+			cheatnum += 1;
+			killcount += 1;
+		}
+		if(gamestep > oldgamestep)
+		{
+			cout<< gamestep <<endl;
+			events[gamestep].state = ACTIVE;
+			actiontime = 0;
+			switch(gamestep)
+			{
+			case TUTORIAL:
+				spawnlevel = 4;
+				devilchance = 2;
+				zpause = 1.f;
+				break;
+			case HAMMER_NAILS:
+				spawnlevel = 6;
+				devilchance = 2;
+				zpause = .95f;
+				break;
+			case RETURN_HN:
+				spawnlevel = 8;
+				devilchance = 2;
+				zpause = .9f;
+				break;
+			case STEAL_FRIDGE:
+				spawnlevel = 10;
+				devilchance = 2;
+				zpause = .85f;
+				break;
+			case ASSEMBLE_CHASIS:
+				spawnlevel = 12;
+				devilchance = 20;
+				zpause = .8f;
+				break;
+			case STEAL_ENGINE:
+				spawnlevel = 14;
+				devilchance = 19;
+				zpause = .75f;
+				break;
+			case ASSEMBLE_ENGINE:
+				spawnlevel = 16;
+				devilchance = 18;
+				zpause = .7f;
+				break;
+			case STEAL_TUB:
+				spawnlevel = 18;
+				devilchance = 17;
+				zpause = .65f;
+				break;
+			case GET_GAS:
+				spawnlevel = 20;
+				devilchance = 16;
+				zpause = .65f;
+				break;
+			case RETURN_TUB:
+				spawnlevel = 22;
+				devilchance = 15;
+				zpause = .6f;
+				break;
+			case STEAL_VACUUM:
+				spawnlevel = 24;
+				devilchance = 15;
+				zpause = .6f;
+				break;
+			case ASSEMBLE_FUEL_PUMP:
+				spawnlevel = 26;
+				devilchance = 14;
+				zpause = .55f;
+				break;
+			case STEAL_STAND:
+				spawnlevel = 28;
+				devilchance = 14;
+				zpause = .55f;
+				break;
+			case ATTACH_WHEELS:
+				spawnlevel = 30;
+				devilchance = 14;
+				zpause = .5f;
+				break;
+			case STEAL_BED:
+				spawnlevel = 32;
+				devilchance = 13;
+				zpause = .45f;
+				break;
+			case RETURN_BED:
+				spawnlevel = 34;
+				devilchance = 13;
+				zpause = .45f;
+				break;
+			case STEAL_SHUTTERS:
+				spawnlevel = 36;
+				devilchance = 13;
+				zpause = .4f;
+				break;
+			case ASSEMBLE_PROP:
+				spawnlevel = 38;
+				devilchance = 12;
+				zpause = .4f;
+				break;
+			case STEAL_GATE:
+				spawnlevel = 40;
+				devilchance = 12;
+				zpause = .35f;
+				break;
+			case ATTACH_ROTOR:
+				spawnlevel = 42;
+				devilchance = 12;
+				zpause = .35f;
+				break;
+			case STEAL_CONTROL:
+				spawnlevel = 44;
+				devilchance = 11;
+				zpause = .3f;
+				break;
+			case INSTALL_CONTROL:
+				spawnlevel = 46;
+				devilchance = 11;
+				zpause = .3f;
+				break;
+			case CRANK_UP:
+				spawnlevel = 48;
+				devilchance = 10;
+				zpause = .25f;
+				break;
+			case TAKE_OFF:
+				spawnlevel = 50;
+				devilchance = 10;
+				zpause = .25f;
+				break;
+			}
+		}
+		oldgamestep = gamestep;
+			
+
+		const u32 now = device->getTimer()->getTime();
+		const f32 frameDeltaTime = (f32)(now - then) / 1000.f;
+		const f32 frameps = 1/(frameDeltaTime);
+		then = now;
+
+		if(bulletcounter != 0)
+		{
+			bpos1 = bullet[bulletcounter-1].Bulletnode->getPosition() - bullet[bulletcounter-1].heading * bullet[bulletcounter-1].velocity * frameDeltaTime * .5;
+			bpos2 = bullet[bulletcounter-1].Bulletnode->getPosition() + bullet[bulletcounter-1].heading * 10000.f;
+		}
+		else
+		{
+			bpos1 = vector3df(0,0,0);
+			bpos2 = vector3df(0,0,0);
+		}
+
+		if(player.level < killcount)
+		{
+			player.level = killcount;
+			switch(player.level)
+			{
+				case 3:
+					gun[PISTOL].cooldown = 500;
+					gun[PISTOL].ammo = gun[PISTOL].maxammo;
+					break;
+				case 5:
+					gun[UZI].unlocked = true;
+					gun[UZI].ammo = gun[UZI].maxammo;
+					break;
+				case 8:
+					gun[PISTOL].damage *= 2;
+					gun[PISTOL].ammo = gun[PISTOL].maxammo;
+					break;
+				case 10:
+					gun[SHOTGUN].unlocked = true;
+					gun[SHOTGUN].ammo = gun[SHOTGUN].maxammo;
+					break;
+				case 13:
+					gun[UZI].cooldown =  150;
+					gun[UZI].ammo = gun[UZI].maxammo;
+					break;
+				case 15:
+					gun[BARREL].unlocked = true;
+					gun[BARREL].ammo = gun[BARREL].maxammo;
+					break;
+				case 17:
+					gun[UZI].maxammo *=  2;
+					gun[UZI].ammo = gun[UZI].maxammo;
+					break;
+				case 18:
+					gun[SHOTGUN].cooldown = 300;
+					gun[SHOTGUN].ammo = gun[SHOTGUN].maxammo;
+					break;
+				case 21:
+					gun[SHOTGUN].maxammo *= 2;
+					gun[SHOTGUN].ammo = gun[SHOTGUN].maxammo;
+					break;
+				case 23:
+					gun[UZI].range *=  2;
+					gun[UZI].ammo = gun[UZI].maxammo;
+					break;
+				case 26:
+					gun[BARREL].maxammo *= 2;
+					gun[BARREL].ammo = gun[BARREL].maxammo;
+					break;
+				case 30:
+					gun[FAKEWALL].unlocked = true;
+					gun[FAKEWALL].ammo = gun[FAKEWALL].maxammo;
+					break;
+				case 32:
+					for(k=0;k<200;k++)
+						barrels[k].range = 130;
+					gun[BARREL].ammo = gun[BARREL].maxammo;
+					break;
+				case 35:
+					gun[SHOTGUN].range *= 2;
+					gun[SHOTGUN].ammo = gun[SHOTGUN].maxammo;
+					break;
+				case 36:
+					gun[BARREL].maxammo *= 2;
+					gun[BARREL].ammo = gun[BARREL].maxammo;
+					break;
+				case 37:
+					gun[FAKEWALL].maxammo *= 2;
+					gun[FAKEWALL].ammo = gun[FAKEWALL].maxammo;
+					break;
+				case 39:
+					gun[UZI].maxammo *=  2;
+					gun[UZI].ammo = gun[UZI].maxammo;
+					break;
+				case 40:
+					gun[CLAYMORE].unlocked = true;
+					gun[CLAYMORE].ammo = gun[CLAYMORE].maxammo;
+					break;
+				case 41:
+					gun[SHOTGUN].maxammo *= 2;
+					gun[SHOTGUN].ammo = gun[SHOTGUN].maxammo;
+					break;
+				case 43:
+					gun[SHOTGUN].cooldown = 175;
+					gun[SHOTGUN].ammo = gun[SHOTGUN].maxammo;
+					break;
+				case 44:
+					for(k=0;k<200;k++)
+						barrels[k].range = 180;
+					gun[BARREL].ammo = gun[BARREL].maxammo;
+					break;
+				case 47:
+					for(k=0;k<200;k++)
+						mines[k].subs = 3;
+					gun[CLAYMORE].ammo = gun[CLAYMORE].maxammo;
+					break;
+				case 48:
+					gun[UZI].damage *=  2;
+					gun[UZI].ammo = gun[UZI].maxammo;
+					break;
+				case 50:
+					gun[ROCKET].unlocked = true;
+					gun[ROCKET].ammo = gun[ROCKET].maxammo;
+					break;
+				case 53:
+					gun[FAKEWALL].maxammo *= 2;
+					gun[FAKEWALL].ammo = gun[FAKEWALL].maxammo;
+					break;
+				case 54:
+					gun[CLAYMORE].maxammo *= 2;
+					gun[CLAYMORE].ammo = gun[CLAYMORE].maxammo;
+					break;
+				case 55: 
+					gun[CHARGE].unlocked = true;
+					gun[CHARGE].ammo = gun[CHARGE].maxammo;
+					break;
+				case 56:
+					gun[SHOTGUN].damage *= 2;
+					gun[SHOTGUN].ammo = gun[SHOTGUN].maxammo;
+					break;
+				case 58:
+					for(k=0;k<200;k++)
+						mines[k].range = 130;
+					gun[CLAYMORE].ammo = gun[CLAYMORE].maxammo;
+					break;
+				case 59:
+					gun[ROCKET].cooldown = 400;
+					gun[ROCKET].ammo = gun[ROCKET].maxammo;
+					break;
+				case 61:
+					gun[UZI].range *= 10;
+					gun[UZI].ammo = gun[UZI].maxammo;
+					break;
+				case 62:
+					for(k=0;k<200;k++)
+						mines[k].range = 180;
+					gun[CLAYMORE].ammo = gun[CLAYMORE].maxammo;
+					break;
+				case 63:
+					for(k=0;k<200;k++)
+						charges[k].subs = 3;
+					gun[CHARGE].ammo = gun[CHARGE].maxammo;
+					break;
+				case 64:
+					gun[CLAYMORE].maxammo *= 2;
+					gun[CLAYMORE].ammo = gun[CLAYMORE].maxammo;
+					break;
+				case 66:
+					gun[ROCKET].maxammo *= 2;
+					gun[ROCKET].ammo = gun[ROCKET].maxammo;
+					break;
+				case 68:
+					gun[CHARGE].maxammo *= 2;
+					gun[CHARGE].ammo = gun[CHARGE].maxammo;
+					break;
+				case 70:
+					gun[RAILGUN].unlocked = true;
+					gun[RAILGUN].ammo = gun[RAILGUN].maxammo;
+					break;
+				case 72:
+					//in the hitcheck explosion creator, the range of the explosion gets set to 130
+					gun[ROCKET].ammo = gun[ROCKET].maxammo;
+				case 74:
+					for(k=0;k<200;k++)
+						charges[k].range = 130;
+					gun[CHARGE].ammo = gun[CHARGE].maxammo;
+					break;
+				case 76:
+					gun[CHARGE].maxammo *= 2;
+					gun[CHARGE].ammo = gun[CHARGE].maxammo;
+					break;
+				case 78:
+					gun[RAILGUN].cooldown = 200;
+					gun[RAILGUN].ammo = gun[RAILGUN].maxammo;
+					break;
+				case 80:
+					gun[RAILGUN].maxammo *= 2;
+					gun[RAILGUN].ammo = gun[RAILGUN].maxammo;
+					break;
+				case 85:
+					gun[ROCKET].maxammo *= 2;
+					gun[ROCKET].ammo = gun[ROCKET].maxammo;
+					break;
+				case 90:
+					gun[UZI].damage *=  2;
+					gun[UZI].ammo = gun[UZI].maxammo;
+					break;
+				case 95:
+					for(k=0;k<200;k++)
+						charges[k].range = 180;
+					gun[CHARGE].ammo = gun[CHARGE].maxammo;
+					break;
+				case 100:
+					gun[RAILGUN].cooldown = 100;
+					gun[RAILGUN].ammo = gun[RAILGUN].maxammo;
+					break;
+				case 105:
+					//in the hitcheck explosion creator, the range of the explosion gets set to 180
+					gun[ROCKET].ammo = gun[ROCKET].maxammo;
+					break;
+				case 110:
+					gun[RAILGUN].maxammo *= 2;
+					gun[RAILGUN].ammo = gun[RAILGUN].maxammo;
+					break;
+				case 115:
+					//in the hitcheck explosion creator, the subs of the explosion gets set to 3;
+					gun[ROCKET].ammo = gun[ROCKET].maxammo;
+					break;
+				case 120:
+					gun[ROCKET].cooldown = 200;
+					gun[ROCKET].ammo = gun[ROCKET].maxammo;
+					break;
+				case 125:
+					gun[RAILGUN].range = 2000;
+					gun[RAILGUN].ammo = gun[RAILGUN].maxammo;
+					break;
+			}
+		}
+
+
+
+		//zxc
+		driver->beginScene(true, true, video::SColor(255,200,200,200));
+		smgr->drawAll();
+		driver->setTransform(ETS_WORLD, IdentityMatrix);
+		driver->draw2DImage(crosshair, position2d<s32>(swid / 2 - 60, shei / 2 - 60), rect<s32>(0,0,121,121), 0, SColor(255,255,255,255), true);
+		driver->draw2DImage(ammo,      position2d<s32>(150, shei - 140 ),             rect<s32>(0,0,125,128), 0, SColor(255,255,255,255), true);
+		driver->draw2DImage(hp,        position2d<s32>(250, shei - 120 ),             rect<s32>(0,0,104, 93), 0, SColor(255,255,255,255), true);
+		driver->draw2DImage(hud,       position2d<s32>(-35, shei - 180 ),              rect<s32>(0,0,523, 233), 0, SColor(150,2.55 * (100 - player.health), 2.55 * player.health,255), true);
+		driver->draw2DRectangle(SColor(200, 2.55 * (100 - player.health), 2.55 * player.health, 0), rect<s32>(350, shei - 90, 350 + (s32)player.health * 5, shei - 40), 0);
+		driver->draw2DImage(skull,     position2d<s32>(swid - 300, shei - 140 ),      rect<s32>(0,0,100, 123), 0, SColor(255,255,255,255), true);
+		gun[PISTOL].ammo = 1;
+		ammocounter(gun[player.active_gun].ammo, Numbers, driver, shei, killcount, kktimer, player.health, swid, actiontime, events[gamestep].time);
+		font->draw(L"graphics.", rect<s32>(10,10,800,800), SColor(255,255,255,255));
+		driver->endScene();
+
+		kktimer -= frameDeltaTime * (1.f + (.01 * killcount));
+		if(oldkillcount < killcount)
+			kktimer = 2;
+		if(kktimer <= 0 && killcount != 0)
+		{
+			killcount -= 1;
+			kktimer = 2;
+		}
+		oldkillcount = killcount;
+
+		zombietimer += frameDeltaTime;
+
+		for(c = 0; c < spawnlevel; c++) // c < 200
+			if(zombies[c].health <= 0 && zombies[c].animation[Is_Dead] == false && zombietimer >= zpause)
+			{
+				zombietimer = 0;
+				int whee = rand()% devilchance;
+				zombies[c].devil = false;
+				if(whee == 7)
+					zombies[c].devil = true;
+
+				if(zombies[c].devil)
+				{
+					zombies[c].Bodynode->setMesh(dbodymesh);
+					zombies[c].Armlnode->setMesh(darmlmesh);
+					zombies[c].Armrnode->setMesh(darmrmesh);
+					zombies[c].Footlnode->setMesh(dfootlmesh);
+					zombies[c].Footrnode->setMesh(dfootrmesh);
+					zombies[c].Headnode->setMesh(dheadmesh);
+					zombies[c].redeye->setRadius(20.f);
+					zombies[c].redeye->setPosition(vector3df(0, 50, 20));
+				}
+				else
+				{
+					zombies[c].Bodynode->setMesh(bodymesh);
+					zombies[c].Armlnode->setMesh(armlmesh);
+					zombies[c].Armrnode->setMesh(armrmesh);
+					zombies[c].Footlnode->setMesh(footlmesh);
+					zombies[c].Footrnode->setMesh(footrmesh);
+					zombies[c].Headnode->setMesh(headmesh);
+					zombies[c].redeye->setRadius(10.f);
+					zombies[c].redeye->setPosition(vector3df(0, 27, 13)); 
+				}
+
+				spawn(zombies[c], zombies, spawnz);
+				rotate(zombies[c], frameDeltaTime, 0.1f);
+			}
+
+		player.health += (100.f - player.health) * frameDeltaTime * .07f;
+		if(player.ass_kick_timer > 0)
+			player.ass_kick_timer -= frameDeltaTime;
+		if(player.ass_kick_timer <= 0)
+			player.is_getting_ass_kicked = false;
+		if(player.is_getting_ass_kicked && player.ass_kick_timer > 0)
+			camera->setPosition(camera->getPosition() + player.ass_kick * frameDeltaTime * 400);
+		frametimer += 1;
+		if(frametimer >= 50)
+		{
+			frametimer = 0;
+			for(c=0;c<200;c++)
+				if(zombies[c].health > 0)
+					zombies[c].Bodynode->setPosition(vector3df(zombies[c].Bodynode->getPosition().X,-200,zombies[c].Bodynode->getPosition().Z));
+		}
+		for(c = 0; c < 200; c++)
+		{
+			if(zombies[c].animation[Is_Dead] && zombies[c].anitime > 3)
+				enemysetup(zombies[c]);
+			animate(zombies[c], frameDeltaTime, player, camera, gun, deathpacks[dpcounter], dpcounter);
+			update(zombies[c], frameDeltaTime);
+			tpos1 = zombies[c].Bodynode->getPosition();
+			is_centering = true;			
+			
+			close = false;
+			closest = -1;
+			sdist = 100;
+			for(i = 0; i < 200; i++)
+			{
+				tpos2 = fakewalls[i].Minenode->getPosition();
+				tdist = sqrt((tpos1.X - tpos2.X) * (tpos1.X - tpos2.X) + (tpos1.Z - tpos2.Z) * (tpos1.Z - tpos2.Z));
+				if(tdist < sdist && fakewalls[i].state == PLACED)
+				{
+					close = true;
+					sdist = tdist;
+					closest = i;
+				}
+			}	
+			if(close && sqrt((tpos1.X - camera->getPosition().X) * (tpos1.X - camera->getPosition().X) + (tpos1.Z - camera->getPosition().Z) * (tpos1.Z - camera->getPosition().Z)) > 150)
+			{
+				is_centering = false;
+				separate(zombies[c], zombies[closest], 2.f * PI, 150, sdist, frameDeltaTime);
+			}
+
+			if(is_centering)
+			{
+				close = false;
+				closest = -1;
+				sdist = 100;
+				for(i = 0; i < 200; i++)
+				{
+					if(i != c)
+					{
+						tpos2 = zombies[i].Bodynode->getPosition();
+						tdist = sqrt((tpos1.X - tpos2.X) * (tpos1.X - tpos2.X) + (tpos1.Z - tpos2.Z) * (tpos1.Z - tpos2.Z));
+						if(tdist < sdist)
+						{
+							close = true;
+							sdist = tdist;
+							closest = i;
+						}
+					}
+				}
+				if(close && sqrt((tpos1.X - camera->getPosition().X) * (tpos1.X - camera->getPosition().X) + (tpos1.Z - camera->getPosition().Z) * (tpos1.Z - camera->getPosition().Z)) > 150)
+					separate(zombies[c], zombies[closest], 2.0, 150, sdist, frameDeltaTime);
+			}			
+
+			if(is_centering)
+				center(zombies[c], camera->getPosition(), 1.2 * PI, frameDeltaTime); 
+		}
+
+		camheading = camera->getTarget() - camera->getAbsolutePosition();
+		camheading.Y = 0;
+		camheading.normalize();
+		if (GetAsyncKeyState(0x57)) // W
+		{
+			camera->setPosition(camera->getAbsolutePosition() + camheading * 150.f * frameDeltaTime);
+		}
+		if (GetAsyncKeyState(0x41)) // A
+		{
+			ssheading = camheading;
+			float oldX;
+			oldX = ssheading.X;
+			ssheading.X = ssheading.X * cos(PI/2.f) - ssheading.Z * sin(PI/2.f);
+			ssheading.Z = oldX        * sin(PI/2.f) + ssheading.Z * cos(PI/2.f);
+			camera->setPosition(camera->getAbsolutePosition() + ssheading * 150.f * frameDeltaTime);
+		}
+		if (GetAsyncKeyState(0x53)) // S
+		{
+			camera->setPosition(camera->getAbsolutePosition() + camheading * 150.f * -frameDeltaTime);
+		}
+		if (GetAsyncKeyState(0x44)) // D
+		{
+			ssheading = camheading;
+			float oldX;
+			oldX = ssheading.X;
+			ssheading.X = ssheading.X * cos(-PI/2.f) - ssheading.Z * sin(-PI/2.f);
+			ssheading.Z = oldX        * sin(-PI/2.f) + ssheading.Z * cos(-PI/2.f);
+			camera->setPosition(camera->getAbsolutePosition() + ssheading * 150.f * frameDeltaTime);
+		}
+		if (GetAsyncKeyState(0x45))
+			eventcheck(events[gamestep], camera, actiontime, gamestep, player, frameDeltaTime);
+		else
+		{
+			events[gamestep].state = ACTIVE;
+			actiontime = 0;
+		}
+		if (GetAsyncKeyState(0x01) && GetAsyncKeyState(0x45) == false)
+		{
+			
+			if(gun[player.active_gun].firetimer == 0)
+			{
+				gun[player.active_gun].firetimer = gun[player.active_gun].cooldown;
+				if(player.active_gun != CHARGE || chargecounter < 5)
+					gun[player.active_gun].ammo -= 1;
+				if(player.active_gun == PISTOL || player.active_gun == UZI || player.active_gun == RAILGUN || player.active_gun == ROCKET)
+				{
+					if(player.active_gun == PISTOL)
+						engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Sounds/Weapons/Rifle_Fire quiet.wav");
+					if(player.active_gun == UZI)
+						engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Sounds/Weapons/Uzi_Fire (Normalized) (1 Shot).wav");
+					if(player.active_gun == RAILGUN)
+						engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Sounds/Weapons/Railgun_Fire.wav");
+						
+					Createbullet(bullet[bulletcounter], gun[player.active_gun], player, camera);
+					if(player.active_gun == ROCKET)
+					{
+						engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Sounds/Weapons/RocketLauncher_Fire.wav");
+						bullet[bulletcounter].Locketnode->setVisible(true);
+						bullet[bulletcounter].Devilnode->setVisible(false);
+					}
+					else
+					{
+						bullet[bulletcounter].Locketnode->setVisible(false);
+						bullet[bulletcounter].Devilnode->setVisible(false);
+					}
+					bulletcounter += 1;
+					if(bulletcounter > 199)
+						bulletcounter = 0;
+				}
+				switch (player.active_gun)
+				{
+					case SHOTGUN:
+						engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Sounds/Weapons/Shotgun_Fire.wav");
+						sgnpump = false;
+						for(i = 0; i < 5; i++)
+						{
+							Createbullet(bullet[bulletcounter], gun[player.active_gun], player, camera);
+							bullet[bulletcounter].Locketnode->setVisible(false);
+							bullet[bulletcounter].Devilnode->setVisible(false);
+							bulletcounter += 1;
+							if(bulletcounter > 199)
+								bulletcounter = 0;	
+						}
+						break;
+				
+					case CLAYMORE:
+						createmine(mines[minecounter], player, gun[player.active_gun], camera);
+						minecounter += 1;
+						if(minecounter > 199)
+							minecounter = 0;
+						break;
+
+					case CHARGE:
+						if(chargecounter < 5)
+						{
+							createmine(charges[chargecounter], player, gun[player.active_gun], camera);
+							chargecounter += 1;
+							if(chargecounter > 199)
+								chargecounter = 0;
+						}
+						break;
+
+					case BARREL:
+						createmine(barrels[barrelcounter], player, gun[player.active_gun], camera);
+						barrelcounter += 1;
+						if(barrelcounter > 199)
+							barrelcounter = 0;
+						break;
+
+					case FAKEWALL:
+						createmine(fakewalls[wallcounter], player, gun[player.active_gun], camera);
+						wallcounter += 1;
+						if(wallcounter > 199)
+							wallcounter = 0;
+						break;
+
+				}
+			}
+		}
+		if (GetAsyncKeyState((0x02))&1 && GetAsyncKeyState(0x45) == false)
+		{
+			player.active_gun += 1;
+			while(gun[player.active_gun].ammo <= 0 && player.active_gun != PISTOL)
+			{
+				player.active_gun += 1;
+				if(player.active_gun >= TOTAL_GUNS)
+					player.active_gun = PISTOL;
+			}
+			for(c = 0; c < TOTAL_GUNS; c++)
+			{
+				gun[c].Gunnode->setVisible(false);
+			}
+			gun[player.active_gun].Gunnode->setVisible(true);
+		}
+		if (GetAsyncKeyState((VK_MBUTTON))&1 && GetAsyncKeyState(0x45) == false) //&& player.active_gun == CHARGE)
+		{
+			for(k=0;k<200;k++)
+				if(charges[k].state == PLACED)
+				{
+					createexplosion(explosions[explosioncounter], charges[k].Minenode->getAbsolutePosition(), charges[k].damage, charges[k].subs, charges[k].range);
+					explosioncounter += 1;
+					if(explosioncounter > 199)
+						explosioncounter = 1;
+					charges[k].state = INACTIVE;
+					charges[k].Minenode->setPosition(vector3df(0,1000,0));
+					charges[k].Minenode->setVisible(false);
+				}
+			chargecounter = 0;
+		}
+
+		if(gun[player.active_gun].ammo <= 0 && player.active_gun != PISTOL)
+		{
+			gun[player.active_gun].Gunnode->setVisible(false);
+			player.active_gun = PISTOL;
+		}
+
+		if(gun[player.active_gun].ammo > 0 || player.active_gun == PISTOL)
+			gun[player.active_gun].Gunnode->setVisible(true);
+
+		//cooldown gun
+		if(gun[player.active_gun].firetimer > 0)
+			gun[player.active_gun].firetimer -= (frameDeltaTime * 1000);
+		if(gun[player.active_gun].firetimer < 0)
+			gun[player.active_gun].firetimer = 0;
+
+		//recoil gun
+		if(gun[player.active_gun].firetimer > .5 * gun[player.active_gun].cooldown)
+			gun[player.active_gun].Gunnode->setRotation( vector3df(10.f * sin( 2.f * gun[player.active_gun].firetimer * PI / gun[player.active_gun].cooldown ), 0, 0));
+		else
+		{
+			gun[player.active_gun].Gunnode->setRotation( vector3df(0,0,0));
+			if(player.active_gun == SHOTGUN && sgnpump == false)
+			{
+				engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Sounds/Weapons/Shotgun_PumpAction.wav");
+				sgnpump = true;
+			}
+		}
+		//update bullets
+		for(c = 0; c < 200; c++)
+		{
+			bullet[c].timer += frameDeltaTime;
+			if(bullet[c].timer > 2)
+				bullet[c].hit = true;
+			if(bullet[c].hit == false)
+			{
+				if(bullet[c].gorigin == ROCKET)
+					bullet[c].velocity += 5001 * frameDeltaTime;
+
+				hitcheck(bullet[c], zombies, barrels, fakewalls, main_zarg, main_zargnum, explosions[explosioncounter], explosioncounter, camera, 1.0f / frameDeltaTime, player, killcount);
+				if(main_zarg == 1)
+				{
+					createexplosion(explosions[explosioncounter], barrels[main_zargnum].Minenode->getPosition(), barrels[main_zargnum].damage, barrels[main_zargnum].subs, barrels[main_zargnum].range);
+					explosioncounter += 1;
+					if(explosioncounter > 199)
+						explosioncounter = 0;
+					barrels[main_zargnum].state = INACTIVE;
+					barrels[main_zargnum].Minenode->setVisible(false);
+				}
+				if(main_zarg == 2)
+				{
+					fakewalls[main_zargnum].dettime -= bullet[c].damage;
+					if(fakewalls[main_zargnum].dettime <= 0)
+					{
+						fakewalls[main_zargnum].state = INACTIVE;
+						fakewalls[main_zargnum].Minenode->setVisible(false);
+					}
+				}
+				bulletpos = bullet[c].Bulletnode->getAbsolutePosition() - camera->getAbsolutePosition();
+				if(sqrt(bulletpos.X * bulletpos.X + bulletpos.Z * bulletpos.Z) > bullet[c].range)
+				{
+					bullet[c].hit = true;
+					bullet[c].Bulletnode->setPosition(vector3df(0,1000,0));
+				}
+			}
+			if(bullet[c].hit)
+			{
+				bullet[c].Bulletnode->setVisible(false);
+				bullet[c].Bulletnode->setPosition(vector3df(0,1000,0));
+			}
+		}
+		// ATTACK CHECKS
+		attackcheck(zombies, camera);
+		for(c=0;c<200;c++)
+		{
+			if(zombies[c].devil == true && zombies[c].animation[Is_Walking] == true)
+				devilattackcheck(zombies[c], barrels, fakewalls, camera, frameDeltaTime);
+			if(zombies[c].devil == true && zombies[c].animation[Is_Attacking] == true && zombies[c].anitime >= 1 && zombies[c].hitcool == 0)
+			{
+				bullet[bulletcounter].gorigin = DEVIL;
+				bullet[bulletcounter].timer = 0;
+				bullet[bulletcounter].Bulletnode->setPosition(zombies[c].Bodynode->getPosition());
+				bullet[bulletcounter].Bulletnode->setRotation(vector3df(0,zombies[c].Bodynode->getRotation().Y,0));
+				bullet[bulletcounter].Bulletnode->setVisible(true);
+				bullet[bulletcounter].velocity = 400;
+				bullet[bulletcounter].range = 500;
+				bullet[bulletcounter].damage = 15;
+				bullet[bulletcounter].hit = false;
+				bullet[bulletcounter].heading = zombies[c].heading;
+				bulletcounter += 1;
+				if(bulletcounter > 199)
+					bulletcounter = 0;
+				bullet[bulletcounter].Devilnode->setVisible(true);
+				zombies[c].hitcool = 999;
+			}
+		}
+		minetriggercheck(zombies, mines, player, explosions[explosioncounter], frameDeltaTime, explosioncounter);
+
+		for(c = 0; c < 200; c++)
+		{
+			collectdeathpack(player, deathpacks[c], gun, camera, headup);
+			if(deathpacks[c].state == PLACED)
+				deathpacks[c].timer -= frameDeltaTime;
+			if(deathpacks[c].state == PLACED && deathpacks[c].timer < 0)
+			{
+				deathpacks[c].state = INACTIVE;
+				deathpacks[c].packnode->setVisible(false);
+			}
+
+			if(explosions[c].state == EXPLODING)
+			{
+				if(explosions[c].dettime > 0)
+					explosions[c].dettime -= frameDeltaTime;
+				if(explosions[c].dettime <= 0)
+				{
+					explosioncheck(zombies, player, explosions[c], camera, killcount);
+					explosioncheckwall(fakewalls, explosions[c], camera);
+					explosioncheckbarrel(barrels, explosions[c], explosions[explosioncounter], player, camera, explosioncounter);
+					explosions[c].state = DRAWING;
+					engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Sounds/Weapons/Explosion quiet.wav");
+					explosions[c].anitime = 0;
+					explosions[c].Elight->setRadius(100.f);
+					if(explosions[c].subs > 0)
+						while(explosions[c].subs > 0)
+						{
+							createexplosion(explosions[explosioncounter], explosions[c].Explodenode->getPosition(), explosions[c].damage, -1, 80);
+							explosioncounter += 1;
+							explosions[c].subs -= 1;
+						}
+					vector3df explop = explosions[c].Explodenode->getPosition() - camera->getPosition();
+					explop.normalize();
+					explop *= -30;
+					explosions[c].Elight->setPosition(explop);
+				}
+			}
+			if(explosions[c].state == DRAWING)
+			{
+				explosions[c].Explodenode->setVisible(true);
+				explosions[c].anitime += frameDeltaTime;
+				explosions[c].Explodenode->setSize(dimension2d<f32>(explosions[c].anitime * (10 * explosions[c].range),explosions[c].anitime * (10 * explosions[c].range)));
+				if(explosions[c].anitime > .25)
+				{
+					explosions[c].Explodenode->setSize(dimension2d<f32>(1,1));
+					explosions[c].state = INACTIVE;
+					explosions[c].Explodenode->setVisible(false);
+					explosions[c].Elight->setRadius(0.f);
+				}
+				
+			}
+			if(mines[c].state == PLACED)
+			{
+				mines[c].blink->setRadius(10.f);			
+			}
+			if(mines[c].state == TRIGGERED)
+			{
+				if(mines[c].timer < .2)
+					mines[c].blink->setRadius(50.f);
+				if(mines[c].timer > .2 && mines[c].timer < .4)
+					mines[c].blink->setRadius(0.f);
+				if(mines[c].timer > .4 && mines[c].timer < .6)
+					mines[c].blink->setRadius(50.f);
+				if(mines[c].timer > .6 && mines[c].timer < .8)
+					mines[c].blink->setRadius(0.f);
+				if(mines[c].timer > .8 && mines[c].timer < 1)
+					mines[c].blink->setRadius(50.f);
+				if(mines[c].timer > 1 && mines[c].timer < 1.2)
+					mines[c].blink->setRadius(0.f);
+			}
+			if(charges[c].state == INACTIVE)
+				charges[c].blink->setRadius(0.f);
+			if(charges[c].state == PLACED)
+			{
+				charges[c].blink->setRadius(10.f);			
+			}
+			if(charges[c].state == TRIGGERED)
+			{
+				if(charges[c].timer < .2)
+					charges[c].blink->setRadius(50.f);
+				if(charges[c].timer > .2 && mines[c].timer < .4)
+					charges[c].blink->setRadius(0.f);
+				if(charges[c].timer > .4 && mines[c].timer < .6)
+					charges[c].blink->setRadius(50.f);
+				if(charges[c].timer > .6 && mines[c].timer < .8)
+					charges[c].blink->setRadius(0.f);
+				if(charges[c].timer > .8 && mines[c].timer < 1)
+					charges[c].blink->setRadius(50.f);
+				if(charges[c].timer > 1 && mines[c].timer < 1.2)
+					charges[c].blink->setRadius(0.f);
+			}
+			if(charges[c].state == INACTIVE)
+				charges[c].blink->setRadius(0.f);
+		}
+		songtimer += frameDeltaTime;
+		if(songtimer >= songlength[songplaying] + 16)
+		{
+			while(songplayed[songplaying] == true)
+				songplaying = rand() % 8;
+			switch(songplaying)
+			{
+				case BLAST_ZONE:
+					engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Music/Blast Zone.ogg");
+					break;
+				case BURN:
+					engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Music/Burn.ogg");
+					break;
+				case DARKNESS:
+					engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Music/Darkness.ogg");
+					break;
+				case HEARTBEAT:
+					engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Music/Heartbeat.ogg");
+					break;
+				case MEATGRINDER:
+					engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Music/Meatgrinder.ogg");
+					break;
+				case ON_THE_JOB:
+					engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Music/On the Job.ogg");
+					break;
+				case OUTBREAK:
+					engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Music/Outbreak.ogg");
+					break;
+				case ROADKILL:
+					engine->play2D("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/Music/Roadkill.ogg");
+					break;
+			}
+			songplayed[songplaying] = true;
+			songtimer = 0;
+			playcount += 1;
+			if(playcount >= 8)
+				for(c=0;c<8;c++)
+					songplayed[c] = false;
+		}
+		//DEATH CODE
+		if(player.health <= 0)
+		{
+			camera->setPosition(vector3df(1000,0,1000));
+			camera->setTarget(vector3df(0,0,0));
+			player.health = 100;
+			for(c=1;c<10;c++)
+				gun[c].ammo = 0;
+		}
+	}
+	device->drop();
+	engine->drop();
+	return 0;
+
+}
+int playersetup(Cplayer &player)
+{
+	player.health = 100;
+	player.deathtimer = 0;
+	player.invulntimer = 5;
+	player.ass_kick_timer = 0;
+	player.invuln = true;
+	player.active_gun = PISTOL;
+	cout << player.health << endl;
+	return 0;
+}
+Cgun gunsetup(Cgun gun[])
+{
+	//qwe
+	int c;
+	for(c = 1; c < 10; c++)
+	{
+		gun[c].ammo = 0;
+		gun[c].gunnum = c;
+		gun[c].unlocked = false;
+		gun[c].firetimer = 0;
+	}
+	gun[PISTOL].ammo = -1;
+	gun[PISTOL].cooldown = 600;
+	gun[PISTOL].firetimer = 0;
+	gun[PISTOL].gunname = "Pistol";
+	gun[PISTOL].gunnum = 0;
+	gun[PISTOL].range = 1000;
+	gun[PISTOL].unlocked = true;
+	gun[PISTOL].damage = 15;
+	gun[UZI].cooldown = 250; // or 150?
+	gun[SHOTGUN].cooldown = 500;
+	gun[BARREL].cooldown = 500;
+	gun[GRENADE].cooldown = 300;
+	gun[FAKEWALL].cooldown = 500;
+	gun[CLAYMORE].cooldown = 500;
+	gun[ROCKET].cooldown = 650;
+	gun[CHARGE].cooldown = 500;
+	gun[RAILGUN].cooldown = 330;
+	gun[UZI].gunname = "Uzi";
+	gun[SHOTGUN].gunname = "Shotgun";
+	gun[BARREL].gunname = "Barrel";
+	gun[GRENADE].gunname = "Grenade";
+	gun[FAKEWALL].gunname = "Fake Wall";
+	gun[CLAYMORE].gunname = "Claymore";
+	gun[ROCKET].gunname = "Rocket";
+	gun[CHARGE].gunname = "Charge";
+	gun[RAILGUN].gunname = "Railgun";
+	gun[UZI].range = 750;
+	gun[SHOTGUN].range = 500;
+	gun[BARREL].range = 0;
+	gun[GRENADE].range = 1000000000;
+	gun[FAKEWALL].range = 0;
+	gun[CLAYMORE].range = 0;
+	gun[ROCKET].range = 1000000000;
+	gun[CHARGE].range = 0;
+	gun[RAILGUN].range = 1000;
+	gun[UZI].damage = 20;
+	gun[SHOTGUN].damage = 20;
+	gun[BARREL].damage = 200;
+	gun[GRENADE].damage = 100;
+	gun[FAKEWALL].damage = 0;
+	gun[CLAYMORE].damage = 100;
+	gun[ROCKET].damage = 150;
+	gun[CHARGE].damage = 100;
+	gun[RAILGUN].damage = 50;
+	gun[PISTOL].maxammo = 9001;
+	gun[UZI].maxammo = 100;
+	gun[SHOTGUN].maxammo = 20;
+	gun[BARREL].maxammo = 10;
+	gun[GRENADE].maxammo = 20;
+	gun[FAKEWALL].maxammo = 10;
+	gun[CLAYMORE].maxammo = 10;
+	gun[CHARGE].maxammo = 10;
+	gun[RAILGUN].maxammo = 20;
+	gun[ROCKET].maxammo = 20;
+	return(*gun);
+}
+int Createbullet(Cbullet &bullet, Cgun &gun, Cplayer, ICameraSceneNode* bcamera)
+{
+	bullet.gorigin = gun.gunnum;
+	bullet.timer = 0;
+	bullet.Bulletnode->setPosition(bcamera->getPosition() + vector3df(0,-20,0));
+	bullet.velocity = 10000;
+	bullet.Bulletnode->setRotation(bcamera->getRotation());
+	if(bullet.gorigin == 7)
+		bullet.velocity = 100;
+	if(bullet.gorigin == 9)
+		bullet.velocity = 20000;
+	bullet.range = gun.range;
+	bullet.damage = gun.damage;
+	bullet.hit = false;
+	vector3df shotspread;
+	if(bullet.gorigin == SHOTGUN)
+	{
+		shotspread.X = (rand()% 10 - 5) / 0.5f;
+		shotspread.Y = (rand()% 10 - 5) / 0.5f;
+		shotspread.Z = (rand()% 10 - 5) / 0.5f;
+	}
+	else
+	{
+		shotspread.X = 0; shotspread.Y = 0; shotspread.Z = 0; 
+	}
+	bullet.heading = (bcamera->getTarget() - bcamera->getAbsolutePosition()) + shotspread;
+	bullet.heading.normalize();
+	gun.firetimer = gun.cooldown;
+	bullet.Bulletnode->setVisible(true);
+	return 0;
+}
+Cenemy hitcheck(Cbullet &bullet, Cenemy enemy[], Cmine barrel[], Cmine fakewall[], int &zarg, int &zargnum, Cexplosion &explosion, int &explodenum, ICameraSceneNode* Camera, f32 frameps, Cplayer &player, int &killcount)
+{
+	zarg = 0;
+	zargnum = 999;
+	int closest = 999, klosest = 999, jlosest = 999, c,k,j, interps = (int)ceil((bullet.velocity/frameps) / 3.0f);
+	float distance[200], tdist, tlimit = 0, blimit = 0, hitrange = 0;
+	bool fixer;
+	vector3df bodyframe[4], pseudobullet, pseudoenemy;
+	for(k = 0; k < interps; k++)
+	{
+		fixer = false;
+		tdist = 999;
+ 		if(bullet.Bulletnode->getPosition().Y <= 80 && bullet.Bulletnode->getPosition().Y >= -20)
+		{
+			closest = 999;
+			for(c = 0; c < 200; c++)
+				if(enemy[c].health > 0)
+				{
+					if(closest == 999)
+					{
+						closest = c;
+						distance[c] = sqrt(pow(enemy[c].Bodynode->getPosition().Z - bullet.Bulletnode->getPosition().Z, 2) + pow(enemy[c].Bodynode->getPosition().X - bullet.Bulletnode->getPosition().X, 2));
+					}
+					else
+					{
+						distance[c] = sqrt(pow(enemy[c].Bodynode->getPosition().Z - bullet.Bulletnode->getPosition().Z, 2) + pow(enemy[c].Bodynode->getPosition().X - bullet.Bulletnode->getPosition().X, 2));
+						if(distance[c] < distance[closest])
+							closest = c;
+					}
+				}
+		}
+		if(closest == 999)
+		{
+			fixer = true;
+			pseudoenemy = enemy[99].Bodynode->getPosition();
+			enemy[99].Bodynode->setPosition(vector3df(12345,12345,12345));
+		}
+		if(bullet.Bulletnode->getPosition().Y <= 50 && bullet.Bulletnode->getPosition().Y >= -10)
+		{
+			klosest = 999;
+			hitrange = 22.f;
+			if(bullet.gorigin == ROCKET)
+				hitrange += 7.f;
+			for(c = 0; c < 200; c++)
+				if(barrel[c].state == PLACED)
+				{
+					if(klosest == 999)
+					{
+						klosest = c;
+						distance[c] = sqrt(pow(barrel[c].Minenode->getPosition().Z - bullet.Bulletnode->getPosition().Z, 2) + pow(barrel[c].Minenode->getPosition().X - bullet.Bulletnode->getPosition().X, 2));
+					}
+					else
+					{
+						distance[c] = sqrt(pow(barrel[c].Minenode->getPosition().Z - bullet.Bulletnode->getPosition().Z, 2) + pow(barrel[c].Minenode->getPosition().X - bullet.Bulletnode->getPosition().X, 2));
+						if(distance[c] < distance[klosest])
+							klosest = c;
+					}
+				}
+			if(klosest !=999 && bullet.Bulletnode->getPosition().Y <= barrel[klosest].Minenode->getPosition().Y + 48 && bullet.Bulletnode->getPosition().Y >= barrel[klosest].Minenode->getPosition().Y &&
+				 hitrange >= sqrt(pow(barrel[klosest].Minenode->getPosition().Z - bullet.Bulletnode->getPosition().Z, 2) + pow(barrel[klosest].Minenode->getPosition().X - bullet.Bulletnode->getPosition().X, 2)) &&
+				 sqrt(pow(enemy[closest].Bodynode->getPosition().Z - bullet.Bulletnode->getPosition().Z, 2) + pow(enemy[closest].Bodynode->getPosition().X - bullet.Bulletnode->getPosition().X, 2)) > sqrt(pow(barrel[klosest].Minenode->getPosition().Z - bullet.Bulletnode->getPosition().Z, 2) + pow(barrel[klosest].Minenode->getPosition().X - bullet.Bulletnode->getPosition().X, 2)))
+			{
+				zarg = 1;
+				zargnum = klosest;
+				if(bullet.gorigin != 9)
+					bullet.hit = true;
+				k = interps;
+				closest = 999;
+				klosest = 999;
+			}
+		}
+		if(bullet.Bulletnode->getPosition().Y <= 62 && bullet.Bulletnode->getPosition().Y >= -10 && k != interps)
+		{
+			jlosest = 999;
+			hitrange = 22.f;
+			if(bullet.gorigin == ROCKET)
+				hitrange += 7.f;
+			for(c = 0; c < 200; c++)
+				if(fakewall[c].state == PLACED)
+				{
+					if(jlosest == 999)
+					{
+						jlosest = c;
+						distance[c] = sqrt(pow(fakewall[c].Minenode->getPosition().Z - bullet.Bulletnode->getPosition().Z, 2) + pow(fakewall[c].Minenode->getPosition().X - bullet.Bulletnode->getPosition().X, 2));
+					}
+					else
+					{
+						distance[c] = sqrt(pow(fakewall[c].Minenode->getPosition().Z - bullet.Bulletnode->getPosition().Z, 2) + pow(fakewall[c].Minenode->getPosition().X - bullet.Bulletnode->getPosition().X, 2));
+						if(distance[c] < distance[jlosest])
+							jlosest = c;
+					}
+				}
+			if(jlosest !=999 && bullet.Bulletnode->getPosition().Y <= fakewall[jlosest].Minenode->getPosition().Y + 62 && bullet.Bulletnode->getPosition().Y >= fakewall[jlosest].Minenode->getPosition().Y &&
+				 hitrange >= sqrt(pow(fakewall[jlosest].Minenode->getPosition().Z - bullet.Bulletnode->getPosition().Z, 2) + pow(fakewall[jlosest].Minenode->getPosition().X - bullet.Bulletnode->getPosition().X, 2)) &&
+				 sqrt(pow(enemy[closest].Bodynode->getPosition().Z - bullet.Bulletnode->getPosition().Z, 2) + pow(enemy[closest].Bodynode->getPosition().X - bullet.Bulletnode->getPosition().X, 2)) > sqrt(pow(fakewall[jlosest].Minenode->getPosition().Z - bullet.Bulletnode->getPosition().Z, 2) + pow(fakewall[jlosest].Minenode->getPosition().X - bullet.Bulletnode->getPosition().X, 2)))
+			{
+				zarg = 2;
+				zargnum = jlosest;
+				if(bullet.gorigin != 9)
+					bullet.hit = true;
+				k = interps;
+				closest = 999;
+				klosest = 999;
+			}
+		}
+		if(fixer == true)
+		{
+			closest = 999;
+			enemy[99].Bodynode->setPosition(pseudoenemy);
+			fixer = false;
+		}
+			if(closest != 999)
+			{
+				tdist = 0;
+				if(enemy[closest].devil == true)
+				{
+					tlimit = enemy[closest].Bodynode->getPosition().Y + 33.f;
+					blimit = enemy[closest].Bodynode->getPosition().Y - 16.f;
+					hitrange = 85.6f;
+					bodyframe[0].Z = enemy[closest].Bodynode->getPosition().Z + (11 * enemy[closest].heading.Z) - (14 * enemy[closest].heading.X);
+					bodyframe[0].X = enemy[closest].Bodynode->getPosition().X + (14 * enemy[closest].heading.Z) + (11 * enemy[closest].heading.X);
+					bodyframe[1].Z = enemy[closest].Bodynode->getPosition().Z - (11 * enemy[closest].heading.Z) - (14 * enemy[closest].heading.X);
+					bodyframe[1].X = enemy[closest].Bodynode->getPosition().X + (14 * enemy[closest].heading.Z) - (11 * enemy[closest].heading.X);
+					bodyframe[2].Z = enemy[closest].Bodynode->getPosition().Z - (11 * enemy[closest].heading.Z) + (14 * enemy[closest].heading.X);
+					bodyframe[2].X = enemy[closest].Bodynode->getPosition().X - (14 * enemy[closest].heading.Z) - (11 * enemy[closest].heading.X);
+					bodyframe[3].Z = enemy[closest].Bodynode->getPosition().Z + (11 * enemy[closest].heading.Z) + (14 * enemy[closest].heading.X);
+					bodyframe[3].X = enemy[closest].Bodynode->getPosition().X - (14 * enemy[closest].heading.Z) + (11 * enemy[closest].heading.X);
+				}
+				else
+				{
+					tlimit = enemy[closest].Bodynode->getPosition().Y + 14.f;
+					blimit = enemy[closest].Bodynode->getPosition().Y - 18.f;
+					hitrange = 73.5f;
+					bodyframe[0].Z = enemy[closest].Bodynode->getPosition().Z + (9 * enemy[closest].heading.Z) - (13 * enemy[closest].heading.X);
+					bodyframe[0].X = enemy[closest].Bodynode->getPosition().X + (13 * enemy[closest].heading.Z) + (9 * enemy[closest].heading.X);
+					bodyframe[1].Z = enemy[closest].Bodynode->getPosition().Z - (9 * enemy[closest].heading.Z) - (13 * enemy[closest].heading.X);
+					bodyframe[1].X = enemy[closest].Bodynode->getPosition().X + (13 * enemy[closest].heading.Z) - (9 * enemy[closest].heading.X);
+					bodyframe[2].Z = enemy[closest].Bodynode->getPosition().Z - (9 * enemy[closest].heading.Z) + (13 * enemy[closest].heading.X);
+					bodyframe[2].X = enemy[closest].Bodynode->getPosition().X - (13 * enemy[closest].heading.Z) - (9 * enemy[closest].heading.X);
+					bodyframe[3].Z = enemy[closest].Bodynode->getPosition().Z + (9 * enemy[closest].heading.Z) + (13 * enemy[closest].heading.X);
+					bodyframe[3].X = enemy[closest].Bodynode->getPosition().X - (13 * enemy[closest].heading.Z) + (9 * enemy[closest].heading.X);
+				}
+				if(bullet.gorigin == ROCKET)
+					hitrange += 7;
+				for(j=0;j<4;j++)
+					tdist += sqrt(pow(bodyframe[j].X - bullet.Bulletnode->getPosition().X, 2) + pow(bodyframe[j].Z - bullet.Bulletnode->getPosition().Z, 2));
+			}
+			//if(tdist <= 73.5 && bullet.Bulletnode->getPosition().Y <= enemy[closest].Bodynode->getPosition().Y + 14.5 && bullet.Bulletnode->getPosition().Y >= enemy[closest].Bodynode->getPosition().Y - 14.5 && closest != 999) // 73.5 is the approximate sum of the max distance from all corners to one corner of this rectangle
+			if(tdist <= hitrange && bullet.Bulletnode->getPosition().Y <= tlimit && bullet.Bulletnode->getPosition().Y >= blimit && closest != 999) // 73.5 is the approximate sum of the max distance from all corners to one corner of this rectangle
+			{
+				if(bullet.gorigin != DEVIL || enemy[closest].devil == false)
+				{
+					enemy[closest].animation[Is_Walking] = false;
+					enemy[closest].animation[Is_Being_Attacked] = true;
+					enemy[closest].anitime = 0;
+					enemy[closest].health -= bullet.damage;
+					enemy[closest].hitheading = bullet.heading;
+					enemy[closest].hitheading.Y = 0;
+					enemy[closest].hitheading.normalize();
+					if(enemy[closest].health <= 0)
+					{
+						killcount += 1;
+						enemy[closest].animation[Is_Being_Attacked] = false;
+						enemy[closest].animation[Is_Dead] = true;
+						enemy[closest].anitime = 0;
+					}
+					if(bullet.gorigin != 9)
+					{
+						bullet.hit = true;
+						k = interps;
+					}
+				}
+
+			}
+			if(closest != 999 && k != interps)
+			{
+				tdist = 0;
+				if(enemy[closest].devil == true)
+				{
+					tlimit = enemy[closest].Bodynode->getPosition().Y + 57.f;
+					blimit = enemy[closest].Bodynode->getPosition().Y + 33.f;
+					hitrange = 75.1f;
+					bodyframe[0].Z = enemy[closest].Bodynode->getPosition().Z + (11 * enemy[closest].heading.Z) - (11 * enemy[closest].heading.X);
+					bodyframe[0].X = enemy[closest].Bodynode->getPosition().X + (11 * enemy[closest].heading.Z) + (11 * enemy[closest].heading.X);
+					bodyframe[1].Z = enemy[closest].Bodynode->getPosition().Z - (11 * enemy[closest].heading.Z) - (11 * enemy[closest].heading.X);
+					bodyframe[1].X = enemy[closest].Bodynode->getPosition().X + (11 * enemy[closest].heading.Z) - (11 * enemy[closest].heading.X);
+					bodyframe[2].Z = enemy[closest].Bodynode->getPosition().Z - (11 * enemy[closest].heading.Z) + (11 * enemy[closest].heading.X);
+					bodyframe[2].X = enemy[closest].Bodynode->getPosition().X - (11 * enemy[closest].heading.Z) - (11 * enemy[closest].heading.X);
+					bodyframe[3].Z = enemy[closest].Bodynode->getPosition().Z + (11 * enemy[closest].heading.Z) + (11 * enemy[closest].heading.X);
+					bodyframe[3].X = enemy[closest].Bodynode->getPosition().X - (11 * enemy[closest].heading.Z) + (11 * enemy[closest].heading.X);
+				}
+				else
+				{
+					tlimit = enemy[closest].Bodynode->getPosition().Y + 57.f;
+					blimit = enemy[closest].Bodynode->getPosition().Y + 33.f;
+					hitrange = 73.f;
+					bodyframe[0].Z = enemy[closest].Bodynode->getPosition().Z + (10 * enemy[closest].heading.Z) - (11 * enemy[closest].heading.X);
+					bodyframe[0].X = enemy[closest].Bodynode->getPosition().X + (11 * enemy[closest].heading.Z) + (10 * enemy[closest].heading.X);
+					bodyframe[1].Z = enemy[closest].Bodynode->getPosition().Z - (10 * enemy[closest].heading.Z) - (11 * enemy[closest].heading.X);
+					bodyframe[1].X = enemy[closest].Bodynode->getPosition().X + (11 * enemy[closest].heading.Z) - (10 * enemy[closest].heading.X);
+					bodyframe[2].Z = enemy[closest].Bodynode->getPosition().Z - (10 * enemy[closest].heading.Z) + (11 * enemy[closest].heading.X);
+					bodyframe[2].X = enemy[closest].Bodynode->getPosition().X - (11 * enemy[closest].heading.Z) - (10 * enemy[closest].heading.X);
+					bodyframe[3].Z = enemy[closest].Bodynode->getPosition().Z + (10 * enemy[closest].heading.Z) + (11 * enemy[closest].heading.X);
+					bodyframe[3].X = enemy[closest].Bodynode->getPosition().X - (11 * enemy[closest].heading.Z) + (10 * enemy[closest].heading.X);
+				}
+				if(bullet.gorigin == ROCKET)
+					hitrange += 7;
+				for(j=0;j<4;j++)
+						tdist += sqrt(pow(bodyframe[j].X - bullet.Bulletnode->getPosition().X, 2) + pow(bodyframe[j].Z - bullet.Bulletnode->getPosition().Z, 2));
+			}
+			//if(tdist <= 73 && bullet.Bulletnode->getPosition().Y <= enemy[closest].Bodynode->getPosition().Y + 34 && bullet.Bulletnode->getPosition().Y >= enemy[closest].Bodynode->getPosition().Y + 16 && closest != 999 && k != interps) // 71.7 is the approximate sum of the max distance from all corners to one corner of this rectangle
+			if(tdist <= hitrange && bullet.Bulletnode->getPosition().Y <= tlimit && bullet.Bulletnode->getPosition().Y >= blimit && closest != 999 && k != interps) // 71.7 is the approximate sum of the max distance from all corners to one corner of this rectangle
+			{
+				enemy[closest].animation[Is_Walking] = false;
+				enemy[closest].animation[Is_Being_Attacked] = true;
+				enemy[closest].anitime = 0;
+				enemy[closest].health -= bullet.damage * 2.f;
+				enemy[closest].hitheading = bullet.heading;
+				enemy[closest].hitheading.Y = 0;
+				enemy[closest].hitheading.normalize();
+				if(enemy[closest].health <= 0)
+				{
+					enemy[closest].animation[Is_Being_Attacked] = false;
+					enemy[closest].animation[Is_Dead] = true;
+					enemy[closest].anitime = 0;
+					killcount += 1;
+				}
+				if(bullet.gorigin != 9)
+				{
+					bullet.hit = true;
+					k = interps;
+				}
+				
+			}
+			if(bullet.gorigin == DEVIL && bullet.hit == false && k != interps)
+				if(20 >= sqrt(pow(Camera->getPosition().X-bullet.Bulletnode->getPosition().X,2) + pow(Camera->getPosition().Z-bullet.Bulletnode->getPosition().Z,2)))
+				{
+					bullet.hit = true;
+					player.is_getting_ass_kicked = true;
+					player.health -= bullet.damage;
+					player.ass_kick = bullet.heading;
+					player.ass_kick_timer = .15f;
+				}
+				if(bullet.Bulletnode->getPosition().Y <= 5 && bullet.hit == false && k!=interps)
+					bullet.hit = true;
+
+		if(k != interps)
+		{
+			pseudobullet = bullet.Bulletnode->getPosition();
+			bullet.Bulletnode->setPosition(bullet.Bulletnode->getPosition() + (bullet.velocity / interps) * bullet.heading * 1.0 / frameps);
+			if(bullet.Bulletnode->getPosition() != pseudobullet + (bullet.velocity / interps) * bullet.heading * 1.0 / frameps)
+			{
+				bullet.hit = true;
+				k = interps;
+			}
+
+		}
+	}
+	if(bullet.gorigin == 7 && bullet.hit == true)
+	{
+		int subs = 0;
+		float range = 80;
+		if(player.level >= 115)
+			subs = 3;
+		if(player.level >= 72)
+			range = 130;
+		if(player.level >= 105)
+			range = 180;
+		createexplosion(explosion, bullet.Bulletnode->getPosition(), bullet.damage, subs, range);
+		explodenum += 1;
+		if(explodenum >199)
+			explodenum = 0;
+	}
+	if(bullet.hit == true)
+	{
+		bullet.Bulletnode->setPosition(vector3df(0,10000,0));
+		bullet.Bulletnode->setVisible(false);
+	}
+	return(*enemy);
+}
+
+
+int spawn(Cenemy &spawnee, Cenemy others[], vector3df spawns[])
+{
+	int ec;
+	float edist;
+	vector3df otherpos;
+	int spawnpoint = rand() % 4;
+	
+	bool canspawn = true;
+	for(ec = 0; ec < 200; ec++)
+	{
+		if(others[ec].health > 0 && canspawn)
+		{
+			otherpos = others[ec].Bodynode->getPosition();
+			edist = sqrt((otherpos.X - spawns[spawnpoint].X) * (otherpos.X - spawns[spawnpoint].X) + (otherpos.Z - spawns[spawnpoint].Z) * (otherpos.Z - spawns[spawnpoint].Z));
+			if(edist < 100)
+				canspawn = false;
+		}
+	}
+	if(canspawn)
+	{
+		spawnee.Bodynode->setVisible(true);
+		spawnee.Bodynode->setPosition(spawns[spawnpoint] + vector3df(0,20,0));
+		spawnee.cooldown = 500;
+		spawnee.heading = vector3df(1,0,0);
+		spawnee.health = 100;
+		spawnee.anitime = 0;
+		if(spawnee.devil == true)
+		{
+			spawnee.health *= 3.5;
+			spawnee.movespeed *= 1.5f;
+		}
+
+	}
+	return 0;
+}
+
+void update(Cenemy updatee, f32 FDT)
+{
+	if(updatee.animation[Is_Walking])
+		updatee.Bodynode->setPosition(updatee.Bodynode->getPosition() + updatee.heading * FDT * updatee.movespeed);
+	if(updatee.animation[Is_Attacking])
+		updatee.Bodynode->setPosition(updatee.Bodynode->getPosition() + updatee.heading * FDT * updatee.movespeed / 3.f);
+	if(updatee.animation[Is_Being_Attacked] || (updatee.animation[Is_Dead] && updatee.anitime < .1))
+		updatee.Bodynode->setPosition(updatee.Bodynode->getPosition() + updatee.hitheading * FDT * 8.f * updatee.movespeed);
+
+	if(updatee.heading.Z > 0)
+		updatee.Bodynode->setRotation(vector3df(0,atan(updatee.heading.X / updatee.heading.Z) * 180.f / PI, 0) + updatee.bodyrotation);
+	else
+		updatee.Bodynode->setRotation(vector3df(0,(atan(updatee.heading.X / updatee.heading.Z) * 180.f / PI) + 180.f,0) + updatee.bodyrotation);
+}
+
+void separate(Cenemy &sepZombie, Cenemy otherzombie, float maxrotsep, float maxsep, float sepdist, f32 sepfdt)
+{
+	vector3df totank = otherzombie.Bodynode->getPosition() - sepZombie.Bodynode->getPosition();
+	float hang, otang, pang;
+	bool left = true;
+	
+	hang = atan(sepZombie.heading.X / sepZombie.heading.Z);
+	if(sepZombie.heading.Z < 0)
+		hang += PI;
+	pang = hang + PI;
+	if(pang >= 2.f*PI)
+		pang -= 2.f*PI;
+	
+	otang = atan(totank.X / totank.Z);
+	if(totank.Z < 0)
+		otang += PI;
+	
+	if(hang <= PI)
+	{
+		if(otang < hang || otang > pang)
+			left = false;
+		else
+			left = true;
+	}
+	if(hang > PI)
+	{
+		if(otang < hang && otang > pang)
+			left = false;
+		else
+			left = true;
+	}
+
+	if(left)
+		rotate(sepZombie, sepfdt, maxrotsep * (maxsep-sepdist)/maxsep);
+	else
+		rotate(sepZombie, sepfdt, maxrotsep * (maxsep-sepdist)/maxsep * -1);
+}
+
+void rotate(Cenemy &rTank, f32 timediff, float angleRotation)
+{
+	//angleRotation is rad/sec
+	float oldX;
+	oldX = rTank.heading.X;
+	rTank.heading.X = rTank.heading.X * cos(angleRotation * timediff) - rTank.heading.Z * sin(angleRotation * timediff);
+	rTank.heading.Z = oldX            * sin(angleRotation * timediff) + rTank.heading.Z * cos(angleRotation * timediff);
+}
+
+void center(Cenemy &cenZombie, vector3df apos, float maxrotcen, f32 cenfdt)
+{
+	vector3df tocenter = apos - cenZombie.Bodynode->getPosition();
+
+	float dang, pdang, avgdang, difdang;
+
+	dang = atan(cenZombie.heading.X / cenZombie.heading.Z);
+	if(cenZombie.heading.Z < 0)
+		dang += PI;
+	pdang = dang + PI;
+	if(pdang >= 2.f*PI)
+		pdang -= 2.f*PI;
+	
+	avgdang = atan(tocenter.X / tocenter.Z);
+	if(tocenter.Z < 0)
+		avgdang += PI;
+
+	difdang = dang - avgdang;
+	if(difdang > PI)
+		difdang -= 2.f * PI;
+	if(difdang < -1.f * PI)
+		difdang += 2.f * PI;
+
+	rotate(cenZombie, cenfdt, maxrotcen * difdang/PI);
+}
+
+void animate(Cenemy &azombie, f32 frameDeltaTime, Cplayer &player, ICameraSceneNode* Camera, Cgun gun[], Cdeathpack &pack, int &pcount)
+{
+	if(azombie.animation[Is_Walking] || (azombie.devil && azombie.animation[Is_Attacking]))
+	{
+		int aspeed = 8;
+		azombie.anitime += frameDeltaTime;
+		vector3df bodyrotation = vector3df(7.5f + 7.5f * sin(aspeed * azombie.anitime * 2.f /** aspeed * PI*/), 0, 0);
+		azombie.Bodynode->setRotation(bodyrotation);
+		azombie.bodyrotation = bodyrotation;
+		azombie.Footrnode->setRotation(vector3df(-20 * sin(aspeed * azombie.anitime), 0, 0));
+		azombie.Footlnode->setRotation(vector3df(20 * sin(aspeed * azombie.anitime), 0, 0));
+		azombie.Armlnode->setRotation(-bodyrotation);
+		azombie.Armrnode->setRotation(-bodyrotation);
+		azombie.Armlnode->setPosition(vector3df(0, 0.8f + 0.8f * sin(aspeed * azombie.anitime * 2.f + 2.f * aspeed * PI), 2.f + 2.f * sin(aspeed * azombie.anitime * 2.f + 2.f * aspeed * PI)) + vector3df(0,11.f,-5.f));
+		azombie.Armrnode->setPosition(vector3df(0, 0.8f + 0.8f * sin(aspeed * azombie.anitime * 2.f + 2.f * aspeed * PI), 2.f + 2.f * sin(aspeed * azombie.anitime * 2.f + 2.f * aspeed * PI)) + vector3df(0,11.f,-5.f));
+	}
+
+	if(azombie.animation[Is_Attacking])
+	{
+		int aspeed = 15;
+		if(azombie.devil)
+			aspeed = 7;
+		float animation_modifier = 1;
+		if(azombie.devil == false)
+		{
+			vector3df bodyrotation = 1 * vector3df(10 + 15 * sin(aspeed * azombie.anitime), 0, 0);
+			azombie.Bodynode->setRotation(bodyrotation);
+			azombie.bodyrotation = bodyrotation;
+			azombie.Armlnode->setRotation(-bodyrotation * .7f + vector3df(-30 * cos(aspeed * azombie.anitime) ,0,0));
+			azombie.Armrnode->setRotation(-bodyrotation * .7f + vector3df(-30 * cos(aspeed * azombie.anitime) ,0,0));
+			azombie.Armlnode->setPosition(vector3df(0, 0 * cos(aspeed * azombie.anitime), 2 + 2.f * sin(aspeed * azombie.anitime)) + vector3df(0,11.f,-5.f));
+			azombie.Armrnode->setPosition(vector3df(0, 0 * cos(aspeed * azombie.anitime), 2 + 2.f * sin(aspeed * azombie.anitime)) + vector3df(0,11.f,-5.f));
+			azombie.Bodynode->setPosition(azombie.Bodynode->getAbsolutePosition() + azombie.heading * (.02f * sin(aspeed * azombie.anitime + 2.f * aspeed * PI)));
+			azombie.Footlnode->setRotation(-bodyrotation);
+			azombie.Footrnode->setRotation(-bodyrotation);
+			azombie.anitime += frameDeltaTime * animation_modifier;
+		}
+
+		
+		if(azombie.anitime > .55 && azombie.devil == false)
+		{
+			attackhitcheck(azombie, player, Camera);
+			azombie.animation[Is_Attacking] = false;
+			azombie.animation[Is_Walking] = true;
+		}
+		if(azombie.anitime > 2 && azombie.devil == true)
+		{
+			attackhitcheck(azombie, player, Camera);
+			azombie.animation[Is_Attacking] = false;
+			azombie.animation[Is_Walking] = true;
+		}
+	}
+
+	if(azombie.animation[Is_Being_Attacked])
+	{
+		if(azombie.anitime >= .08)
+		{
+			azombie.animation[Is_Being_Attacked] = false;
+			azombie.animation[Is_Walking] = true;
+		}
+
+		azombie.anitime += frameDeltaTime;
+	}
+
+	if(azombie.animation[Is_Dead])
+	{
+
+		azombie.anitime += frameDeltaTime;
+		if(azombie.anitime > .1 && azombie.dpcheck == false)
+		{
+			azombie.Bodynode->setPosition(azombie.Bodynode->getPosition() + vector3df(0,1000,0));
+			int lolrand;
+			lolrand = rand()%15;
+			if(lolrand == 10 || azombie.devil)
+			{
+				createdeathpack(azombie, pack, gun);
+				pcount += 1;
+			}
+			azombie.dpcheck = true;
+		}
+	}
+}
+
+void enemysetup(Cenemy &senemy)
+{
+	int p;
+	senemy.health = -103;
+	senemy.movespeed = 90;
+	senemy.anitime = 0;
+	senemy.cooldown = 0;
+	senemy.devil = false;
+	senemy.heading = vector3df(0,0,0);
+	senemy.hitcool = 0;
+	senemy.hitheading = vector3df(0,0,0);
+	senemy.level = 0;
+	for(p = 0; p < Animation_Number; p++)
+		senemy.animation[p] = false;
+	senemy.animation[Is_Walking] = true;
+	senemy.Bodynode->setVisible(false);
+	senemy.dpcheck = false;
+}
+
+Cenemy attackcheck(Cenemy enemy[], ICameraSceneNode* Camera)
+{
+	int c,k;
+	float dist;
+	for(c = 0; c < 200; c++)
+		if(enemy[c].health > 0 && enemy[c].devil == false)
+		{
+			dist = sqrt(pow(Camera->getPosition().X - enemy[c].Bodynode->getPosition().X,2) + pow(Camera->getPosition().Z - enemy[c].Bodynode->getPosition().Z,2));
+			if(dist <= 50 && enemy[c].animation[Is_Walking] == true)
+			{
+				for(k = 0; k < Animation_Number; k++)
+					enemy[c].animation[k] = false;
+				enemy[c].animation[Is_Attacking] = true;
+				enemy[c].animation[Is_Walking] = false;
+				enemy[c].anitime = 0;
+			}
+		}
+	return(*enemy);
+}
+
+void attackhitcheck(Cenemy enemy, Cplayer &player, ICameraSceneNode* Camera)
+{
+
+	if(sqrt(pow(Camera->getPosition().X - enemy.Bodynode->getPosition().X,2) + pow(Camera->getPosition().Z - enemy.Bodynode->getPosition().Z,2)) < 50 && enemy.devil == false)
+	{
+		vector3df toplayer = Camera->getPosition() - enemy.Bodynode->getPosition(), cenresult;
+		float resultmag;
+
+		cenresult = (100 * enemy.heading) + toplayer;
+		resultmag = sqrt(cenresult.X * cenresult.X + cenresult.Z * cenresult.Z);
+		if(resultmag > 100)
+		{
+			player.is_getting_ass_kicked = true;
+			player.health -= 10.f * (1.f + enemy.level / 100.f);
+			player.ass_kick = enemy.heading;
+			player.ass_kick_timer = .15f;
+		}
+			
+	}
+}
+
+Cenemy explosioncheck(Cenemy enemy[], Cplayer &player, Cexplosion &explosion, ICameraSceneNode* Camera, int &killcount)
+{
+	int c, k;
+	float dist;
+	for(c=0;c<200;c++)
+		if(enemy[c].health > 0)
+		{
+			//dist = sqrt(pow(enemy[c].Bodynode->getPosition().X - explosion.Explodenode->getPosition().X,2) + pow(enemy[c].Bodynode->getPosition().Z - explosion.Explodenode->getPosition().Z,2));
+			dist = sqrt((enemy[c].Bodynode->getPosition().X - explosion.Explodenode->getPosition().X) * (enemy[c].Bodynode->getPosition().X - explosion.Explodenode->getPosition().X) + (enemy[c].Bodynode->getPosition().Z - explosion.Explodenode->getPosition().Z) * (enemy[c].Bodynode->getPosition().Z - explosion.Explodenode->getPosition().Z));
+			if(dist <= explosion.range)
+			{
+				for(k = 0; k < Animation_Number; k++)
+					enemy[c].animation[k] = false;
+				enemy[c].health -= explosion.damage - ((explosion.damage / 2.f) * (dist / explosion.range));
+				if(enemy[c].health > 0)
+					enemy[c].animation[Is_Being_Attacked] = true;
+				if(enemy[c].health <= 0)
+				{
+					enemy[c].animation[Is_Being_Attacked] = false;
+					enemy[c].animation[Is_Dead] = true;
+					enemy[c].anitime = 0;
+					killcount += 1;
+				}
+				enemy[c].hitheading = vector3df(enemy[c].Bodynode->getPosition().X - explosion.Explodenode->getPosition().X,0,enemy[c].Bodynode->getPosition().Z - explosion.Explodenode->getPosition().Z);
+				enemy[c].hitheading.normalize();
+				enemy[c].anitime = 0;
+				
+			}
+		}
+	if(sqrt(pow(Camera->getPosition().X - explosion.Explodenode->getPosition().X,2) + pow(Camera->getPosition().Z - explosion.Explodenode->getPosition().Z,2)) <= explosion.range)
+	{
+		float expdamage = explosion.damage - ((explosion.damage / 2.f) * (dist / explosion.range));
+		if(expdamage < 0)
+			expdamage *= -1.f;
+		player.health -= expdamage;
+		player.is_getting_ass_kicked = true;
+		player.ass_kick = vector3df(1,0,0);
+		player.ass_kick_timer = .15f; 
+	}
+	return(*enemy);
+}
+
+Cmine minetriggercheck(Cenemy enemy[], Cmine mine[], Cplayer player, Cexplosion &explosion, f32 framedt, int &expcount)
+{
+	int c,k;
+	bool stop = false;
+	for(k=0;k<200;k++)
+	{
+		if(mine[k].state == EXPLODED)
+		{
+			mine[k].state = INACTIVE;
+			mine[k].Minenode->setVisible(false);
+			createexplosion(explosion, mine[k].Minenode->getPosition(), mine[k].damage, mine[k].subs, mine[k].range);
+		}
+		if(mine[k].state == PLACED)
+			for(c=0;c<200;c++)
+				if(sqrt(pow(enemy[c].Bodynode->getPosition().X - mine[k].Minenode->getPosition().X,2) + pow(enemy[c].Bodynode->getPosition().Z - mine[k].Minenode->getPosition().Z,2)) <= 30)
+				{
+					mine[k].timer = mine[k].dettime;
+					mine[k].state = TRIGGERED;
+				}
+		if(mine[k].state == TRIGGERED)
+		{
+			mine[k].timer -= framedt;
+			if(mine[k].timer <= 0)
+			{
+				if(stop)
+					mine[k].state = EXPLODED;
+				else
+				{
+					mine[k].state = INACTIVE;
+					mine[k].Minenode->setVisible(false);
+					createexplosion(explosion, mine[k].Minenode->getPosition(), mine[k].damage, mine[k].subs, mine[k].range);
+					expcount += 1;
+					if(expcount > 199)
+						expcount = 0;
+				}
+			}
+		}
+	}
+	return(*mine);
+}
+
+void createmine(Cmine &mine, Cplayer player, Cgun &gun, ICameraSceneNode* Camera)
+{
+	mine.state = PLACED;
+	vector3df front = Camera->getTarget() - Camera->getPosition();
+	front.Y = 0;
+	front.normalize();
+	mine.Minenode->setPosition(Camera->getPosition() + 50 * front - vector3df(0,57,0));
+	mine.Minenode->setVisible(true);
+	mine.damage = gun.damage;
+	if(mine.gorigin == CLAYMORE)
+		mine.dettime = 1.1f;
+	if(mine.gorigin == FAKEWALL)
+		mine.dettime = 100;
+	if(mine.gorigin == BARREL)
+		mine.dettime = 0;
+	if(mine.gorigin == CHARGE)
+		mine.subs = 3;
+	mine.timer = 0;
+}
+
+Cmine claymoresetup(Cmine clay[], IAnimatedMesh* claymesh, ISceneManager* smgr)
+{
+	int z;
+	for(z = 0; z < 200; z++)
+	{
+		clay[z].gorigin = CLAYMORE;
+		clay[z].state = INACTIVE;
+		clay[z].Minenode = smgr->addAnimatedMeshSceneNode(claymesh, 0, -1, vector3df(0,1000,0));
+		clay[z].Minenode->setVisible(false);
+		clay[z].range = 80;
+		clay[z].subs = 0;
+		clay[z].blink = smgr->addLightSceneNode(clay[z].Minenode, vector3df(0,25,0), SColorf(0.f, 0.f, 1.f), 0.f);
+	}
+	return(*clay);
+}
+Cmine chargesetup(Cmine charges[], IAnimatedMesh* chargemesh, ISceneManager* smgr)
+{
+	int z;
+	for(z = 0; z < 200; z++)
+	{
+		charges[z].gorigin = CHARGE;
+		charges[z].state = INACTIVE;
+		charges[z].Minenode = smgr->addAnimatedMeshSceneNode(chargemesh, 0, -1, vector3df(0,1000,0));
+		charges[z].Minenode->setVisible(false);
+		charges[z].range = 80;
+		charges[z].subs = 0;
+		charges[z].blink = smgr->addLightSceneNode(charges[z].Minenode, vector3df(0,25,0), SColorf(1.f, 1.f, 0.f), 0.f);
+	}
+	return(*charges);
+}
+
+Cmine barrelsetup(Cmine barrel[], IAnimatedMesh* barrelmesh, ISceneManager* smgr)
+{
+	int z;
+	for(z = 0; z < 200; z++)
+	{
+		barrel[z].gorigin = BARREL;
+		barrel[z].state = INACTIVE;
+		barrel[z].Minenode = smgr->addAnimatedMeshSceneNode(barrelmesh, 0, -1, vector3df(0,1000,0));
+		barrel[z].Minenode->setVisible(false);
+		barrel[z].range = 80;
+		barrel[z].subs = 0;
+	}
+	return(*barrel);
+}
+
+Cmine wallsetup(Cmine wallfake[], IAnimatedMesh* wallfakemesh, ISceneManager* smgr)
+{
+	int z;
+	for(z = 0; z < 200; z++)
+	{
+		wallfake[z].gorigin = FAKEWALL;
+		wallfake[z].state = INACTIVE;
+		wallfake[z].Minenode = smgr->addAnimatedMeshSceneNode(wallfakemesh, 0, -1, vector3df(0,1000,0));
+		wallfake[z].Minenode->setVisible(false);
+	}
+	return(*wallfake);
+}
+
+void createexplosion(Cexplosion &explosion, vector3df position, float damage, int subs, float range)
+{
+	//subs = 0 is not a sub or creating a sub. subs = -1 means it is a sub so it sets the dettimer
+	if(explosion.state == INACTIVE)
+	{
+		explosion.anitime = 0;
+		explosion.damage = damage;
+		explosion.subs = subs;
+		if(explosion.subs == -1)
+		{
+			explosion.dettime = 1;
+			explosion.Explodenode->setPosition(vector3df(position.X + ((rand() % 200) - 100.f), 0, position.Z + ((rand() % 200) - 100.f)));
+		}
+		else
+		{
+			explosion.dettime = 0;
+			explosion.Explodenode->setPosition(position);
+		}
+		explosion.range = range;
+		explosion.state = EXPLODING;
+		explosion.Explodenode->setVisible(true);
+	}
+}
+
+Cmine explosioncheckwall(Cmine wall[], Cexplosion &explosion, ICameraSceneNode* Camera)
+{
+	int c;
+	float dist;
+	for(c=0;c<200;c++)
+		if(wall[c].state == PLACED)
+		{
+			dist = sqrt(pow(wall[c].Minenode->getPosition().X - explosion.Explodenode->getPosition().X,2) + pow(wall[c].Minenode->getPosition().Z - explosion.Explodenode->getPosition().Z,2));
+			if(dist <= explosion.range)
+			{
+				wall[c].dettime -= explosion.damage - ((explosion.damage / 2.f) * (dist / explosion.range));
+				if(wall[c].dettime <= 0)
+				{
+					wall[c].state = INACTIVE;
+					wall[c].Minenode->setVisible(false);
+				}
+			}
+		}
+	return(*wall);
+}
+
+Cmine explosioncheckbarrel(Cmine barrel[], Cexplosion &explosion, Cexplosion &newexplosion, Cplayer player, ICameraSceneNode* Camera, int &expcount)
+{
+	int c;
+	float dist;
+	for(c=0;c<200;c++)
+		if(barrel[c].state == PLACED)
+		{
+			dist = sqrt(pow(barrel[c].Minenode->getPosition().X - explosion.Explodenode->getPosition().X,2) + pow(barrel[c].Minenode->getPosition().Z - explosion.Explodenode->getPosition().Z,2));
+			if(dist <= explosion.range)
+			{
+				barrel[c].state = INACTIVE;
+				barrel[c].Minenode->setVisible(false);
+				createexplosion(newexplosion, barrel[c].Minenode->getPosition(), barrel[c].damage, barrel[c].subs , barrel[c].range);
+				expcount += 1;
+				if(expcount > 199)
+					expcount = 0;
+			}
+		}
+	return(*barrel);
+}
+
+void createdeathpack(Cenemy enemy, Cdeathpack &pack, Cgun gun[])
+{
+	int gavailable = 0, c;
+	for(c=0;c<10;c++)
+		if(gun[c].unlocked == true)
+			gavailable += 1;
+	pack.gorigin = rand() % gavailable; // a value of 0 here means it has the potential to be a life up. Obviously the pistol does not require additional ammo. 
+	while(pack.gorigin == GRENADE)
+		pack.gorigin = rand() % gavailable;
+	pack.packnode->setPosition(vector3df(enemy.Bodynode->getPosition().X, 0, enemy.Bodynode->getPosition().Z));
+	pack.state = PLACED;
+	pack.timer = 20;
+	pack.packnode->setVisible(true);
+}
+
+Cgun collectdeathpack(Cplayer &player, Cdeathpack &pack, Cgun gun[], ICameraSceneNode* Camera, Cheadup &headup)
+{
+	if(30 >= sqrt(pow(Camera->getPosition().X - pack.packnode->getPosition().X,2) + pow(Camera->getPosition().Z - pack.packnode->getPosition().Z,2)))
+	{
+		pack.state = INACTIVE;
+		pack.timer = -1;
+		pack.packnode->setVisible(false);
+		headup.timer = 20;
+		if(player.health < 50)
+			pack.gorigin = 0;
+		if(player.health < 100 && pack.gorigin == 0)
+		{
+			player.health = 100;
+			headup.text = "You have been healed";
+			pack.gorigin = -1;
+		}
+		if(pack.gorigin == 0 && player.health == 100)
+		{
+			int gavailable = -1, c;
+			for(c=0;c<10;c++)
+				if(gun[c].unlocked == true)
+					gavailable += 1;
+			if(gavailable > 0)
+				pack.gorigin = (rand() % (gavailable)) + 1;
+			if(gavailable == 0)
+				headup.text = "You have no guns which need ammo";
+			else
+				while(pack.gorigin == GRENADE || pack.gorigin == PISTOL)
+					pack.gorigin = rand() % gavailable;
+		}
+		if(pack.gorigin >= 1)
+		{
+			gun[pack.gorigin].ammo = gun[pack.gorigin].maxammo;
+			if(pack.gorigin == 1)
+				headup.text = "You picked up UZI ammo";
+			if(pack.gorigin == 2)
+				headup.text = "You picked up SHOTGUN ammo";
+			if(pack.gorigin == 3)
+				headup.text = "You picked up BARREL ammo";
+			if(pack.gorigin == 4)
+				headup.text = "You picked up GRENADE ammo";
+			if(pack.gorigin == 5)
+				headup.text = "You picked up FAKE WALL ammo";
+			if(pack.gorigin == 6)
+				headup.text = "You picked up CLAYMORE ammo";
+			if(pack.gorigin == 7)
+				headup.text = "You picked up ROCKET ammo";
+			if(pack.gorigin == 8)
+				headup.text = "You picked up CHARGE ammo";
+			if(pack.gorigin == 9)
+				headup.text = "You picked up RAILGUN ammo";
+			pack.gorigin = -1;
+		}
+	}
+	return(*gun);
+}
+
+Cdeathpack setupdeathpacks(Cdeathpack pack[], ISceneManager* smgr)
+{
+	int c;
+	IAnimatedMesh* pickupboxmesh = smgr->getMesh("C:/Users/grover/Documents/My Dropbox/CPP Progs/boxhead/pickup_box3.obj");
+	for(c=0;c<200;c++)
+	{
+		pack[c].gorigin = -1;
+		pack[c].state = INACTIVE;
+		pack[c].packnode = smgr->addAnimatedMeshSceneNode(pickupboxmesh, 0, -1, vector3df(0, -200, 0));
+		pack[c].packnode->setVisible(false);
+		pack[c].packnode->setMaterialFlag(EMF_LIGHTING, false);
+		pack[c].timer = -1;
+	}
+	return(*pack);
+}
+
+
+void ammocounter(int ammo, ITexture* numbers[], IVideoDriver* driver, int height, int killcount, float kktimer, int hp, int width, float actiontime, float actionlength)
+{
+	int hundreds, tens, ones, active, c = 0, xpos = 80;
+	hundreds = (int)ammo / 100;
+	tens = (int)(ammo - (100 * hundreds) ) / 10;
+	ones = (int)(ammo - (100 * hundreds) - (10 * tens) );
+	
+	int khundreds, ktens, kones;
+	khundreds = (int)killcount / 100;
+	ktens = (int)(killcount - (100 * khundreds) ) / 10;
+	kones = (int)(killcount - (100 * khundreds) - (10 * ktens) );
+
+	driver->draw2DRectangle(SColor(200, 2.55 * (100 - hp), 2.55 * hp, 0), rect<s32>(width - 165, height - 30, width - 165 + kktimer * 70.f, height - 20), 0);
+	driver->draw2DRectangle(SColor(200, 2.55 * (100 - hp), 2.55 * hp, 0), rect<s32>(width - 165, height - 50, width - 165 + (2 * (actiontime / actionlength)) * 70, height - 40), 0);
+
+	for(c = 0; c < 6; c++)
+	{
+		if(c == 0)
+			active = ones;
+		if(c == 1)
+			active = tens;
+		if(c == 2)
+			active = hundreds;
+		if(c == 3)
+		{
+			active = kones;
+			xpos = width + 50;
+		}
+		if(c == 4)
+			active = ktens;
+		if(c == 5)
+			active = khundreds;
+
+		switch(active)
+		{
+			case 0:
+				driver->draw2DImage(numbers[0], position2d<s32>(xpos - 50 * c, height - 140), rect<s32>(0,0,109,132), 0, SColor(200, 2.55 * (100 - hp), 2.55 * hp, 0), true);
+				break;
+			case 1:
+				driver->draw2DImage(numbers[1], position2d<s32>(xpos - 50 * c, height - 140), rect<s32>(0,0,109,132), 0, SColor(200, 2.55 * (100 - hp), 2.55 * hp, 0), true);
+				break;
+			case 2:
+				driver->draw2DImage(numbers[2], position2d<s32>(xpos - 50 * c, height - 140), rect<s32>(0,0,109,132), 0, SColor(200, 2.55 * (100 - hp), 2.55 * hp, 0), true);
+				break;
+			case 3:
+				driver->draw2DImage(numbers[3], position2d<s32>(xpos - 50 * c, height - 140), rect<s32>(0,0,109,132), 0, SColor(200, 2.55 * (100 - hp), 2.55 * hp, 0), true);
+				break;
+			case 4:
+				driver->draw2DImage(numbers[4], position2d<s32>(xpos - 50 * c, height - 140), rect<s32>(0,0,109,132), 0, SColor(200, 2.55 * (100 - hp), 2.55 * hp, 0), true);
+				break;
+			case 5:
+				driver->draw2DImage(numbers[5], position2d<s32>(xpos - 50 * c, height - 140), rect<s32>(0,0,109,132), 0, SColor(200, 2.55 * (100 - hp), 2.55 * hp, 0), true);
+				break;
+			case 6:
+				driver->draw2DImage(numbers[6], position2d<s32>(xpos - 50 * c, height - 140), rect<s32>(0,0,109,132), 0, SColor(200, 2.55 * (100 - hp), 2.55 * hp, 0), true);
+				break;
+			case 7:
+				driver->draw2DImage(numbers[7], position2d<s32>(xpos - 50 * c, height - 140), rect<s32>(0,0,109,132), 0, SColor(200, 2.55 * (100 - hp), 2.55 * hp, 0), true);
+				break;
+			case 8:
+				driver->draw2DImage(numbers[8], position2d<s32>(xpos - 50 * c, height - 140), rect<s32>(0,0,109,132), 0, SColor(200, 2.55 * (100 - hp), 2.55 * hp, 0), true);
+				break;
+			case 9:
+				driver->draw2DImage(numbers[9], position2d<s32>(xpos - 50 * c, height - 140), rect<s32>(0,0,109,132), 0, SColor(200, 2.55 * (100 - hp), 2.55 * hp, 0), true);
+				break;
+		}
+
+	}
+
+}
+void devilattackcheck(Cenemy &devil, Cmine mine[], Cmine fakewall[], ICameraSceneNode* Camera, f32 fdt)
+{//In here the mines are actually barrels... whatever, the return is correct
+	int c;
+	int closest = 999;
+	float dist[200];
+	bool shooting = false;
+	
+
+	if(750>= sqrt(pow(Camera->getPosition().X - devil.Bodynode->getPosition().X,2) + pow(Camera->getPosition().Z - devil.Bodynode->getPosition().Z,2)) && devil.animation[Is_Walking] == true)
+	{
+		devil.heading = vector3df(Camera->getPosition().X - devil.Bodynode->getPosition().X, 0 ,Camera->getPosition().Z - devil.Bodynode->getPosition().Z);
+		devil.heading.normalize();
+		update(devil,0);
+		shooting = true;
+	}
+	if(shooting == false && devil.animation[Is_Walking] == true)
+	{
+		closest = 999;
+		for(c=0;c<200;c++)
+		{
+			dist[c] = sqrt(pow(fakewall[c].Minenode->getPosition().X - devil.Bodynode->getPosition().X,2) + pow(fakewall[c].Minenode->getPosition().Z - devil.Bodynode->getPosition().Z,2));
+			if(fakewall[c].state == PLACED && 500 >= dist[c])
+				if(closest == 999)
+					closest = c;
+				else
+					if(dist[c] < dist[closest])
+						closest = c;
+
+		}
+		if(closest != 999)
+		{
+			devil.heading = vector3df(fakewall[closest].Minenode->getPosition().X - devil.Bodynode->getPosition().X, 0 ,fakewall[closest].Minenode->getPosition().Z - devil.Bodynode->getPosition().Z);
+			devil.heading.normalize();
+			update(devil,0);
+			shooting = true;
+		}
+	}
+	if(shooting == false && devil.animation[Is_Walking] == true)
+	{
+		closest = 999;
+		for(c=0;c<200;c++)
+		{
+			dist[c] = sqrt(pow(mine[c].Minenode->getPosition().X - devil.Bodynode->getPosition().X,2) + pow(mine[c].Minenode->getPosition().Z - devil.Bodynode->getPosition().Z,2));
+			if(mine[c].state == PLACED && 500 >= dist[c])
+				if(closest == 999)
+					closest = c;
+				else
+					if(dist[c] < dist[closest])
+						closest = c;
+
+		}
+		if(closest != 999)
+		{
+			devil.heading = vector3df(mine[closest].Minenode->getPosition().X - devil.Bodynode->getPosition().X, 0 ,mine[closest].Minenode->getPosition().Z - devil.Bodynode->getPosition().Z);
+			devil.heading.normalize();
+			update(devil,0);
+			shooting = true;
+		}
+	}
+	if(shooting == true)
+	{
+		for(c=0;c<6;c++)
+			devil.animation[c] = false;
+		devil.animation[Is_Attacking] = true;
+		devil.anitime = 0;
+		devil.hitcool = 0;
+	}
+}
+Cevents eventsetup(Cevents events[])
+{
+	int c,k;
+	for(c=0;c<199;c++)
+	{
+		events[c].state = NOT_ACTIVE;
+		for(k=0;k<10;k++)
+		{
+			events[c].complete[k] = false;
+			events[c].eventpos[k] = vector3df(0,1000,0);
+		}
+	}
+	// xcv
+	events[TUTORIAL].messagenum = 1;
+	events[TUTORIAL].possloc = 1;
+	events[TUTORIAL].range = 200;
+	events[TUTORIAL].steps = 1;
+	events[TUTORIAL].time = 2;
+	events[TUTORIAL].eventpos[0] = vector3df(282, 0, 348);
+	/*events[FIND_BLUEPRINTS].messagenum = 2;
+	events[FIND_BLUEPRINTS].possloc = 1;
+	events[FIND_BLUEPRINTS].range = 100;
+	events[FIND_BLUEPRINTS].steps = 1;
+	events[FIND_BLUEPRINTS].time = 1;
+	events[FIND_BLUEPRINTS].eventpos[0] = vector3df(-1420, 0, 2000);*/
+	events[HAMMER_NAILS].messagenum = 3;
+	events[HAMMER_NAILS].possloc = 1;
+	events[HAMMER_NAILS].range = 150;
+	events[HAMMER_NAILS].steps = 1;
+	events[HAMMER_NAILS].time = 3;
+	events[HAMMER_NAILS].eventpos[0] = vector3df(-2819, 0, -1099);
+	events[RETURN_HN].messagenum = 4;
+	events[RETURN_HN].possloc = 1;
+	events[RETURN_HN].range = 425;
+	events[RETURN_HN].steps = 1;
+	events[RETURN_HN].time = 2;
+	events[RETURN_HN].eventpos[0] = vector3df(1300, 0, 1524);
+	events[STEAL_FRIDGE].messagenum = 5;
+	events[STEAL_FRIDGE].possloc = 5;
+	events[STEAL_FRIDGE].range = 100;
+	events[STEAL_FRIDGE].steps = 5;
+	events[STEAL_FRIDGE].time = 4;
+	events[STEAL_FRIDGE].eventpos[0] = vector3df(-934, 0, 2298);
+	events[STEAL_FRIDGE].eventpos[1] = vector3df(-2233, 0, 1840);
+	events[STEAL_FRIDGE].eventpos[2] = vector3df(-2047, 0, 999);
+	events[STEAL_FRIDGE].eventpos[3] = vector3df(-1469, 0, 506);
+	events[STEAL_FRIDGE].eventpos[4] = vector3df(-3236, 0, -2475);
+	events[ASSEMBLE_CHASIS].messagenum = 6;
+	events[ASSEMBLE_CHASIS].possloc = 5;
+	events[ASSEMBLE_CHASIS].range = 425;
+	events[ASSEMBLE_CHASIS].steps = 5;
+	events[ASSEMBLE_CHASIS].time = 3;
+	for(c=0;c<events[ASSEMBLE_CHASIS].steps;c++)
+		events[ASSEMBLE_CHASIS].eventpos[c] = vector3df(1300, 0, 1524);
+	events[STEAL_ENGINE].messagenum = 7;
+	events[STEAL_ENGINE].possloc = 2;
+	events[STEAL_ENGINE].range = 300;
+	events[STEAL_ENGINE].steps = 2;
+	events[STEAL_ENGINE].time = 5;
+	events[STEAL_ENGINE].eventpos[0] = vector3df(-430, 0, -700);
+	events[STEAL_ENGINE].eventpos[1] = vector3df(-2425, 0, 750);
+	events[ASSEMBLE_ENGINE].messagenum = 8;
+	events[ASSEMBLE_ENGINE].possloc = 1;
+	events[ASSEMBLE_ENGINE].range = 425;
+	events[ASSEMBLE_ENGINE].steps = 1;
+	events[ASSEMBLE_ENGINE].time = 5;
+	events[ASSEMBLE_ENGINE].eventpos[0] = vector3df(1300, 0, 1524);
+	events[STEAL_TUB].messagenum = 9;
+	events[STEAL_TUB].possloc = 1;
+	events[STEAL_TUB].range = 200;
+	events[STEAL_TUB].steps = 1;
+	events[STEAL_TUB].time = 2;
+	events[STEAL_TUB].eventpos[0] = vector3df(-781, 0, 1447);
+	events[GET_GAS].messagenum = 10;
+	events[GET_GAS].possloc = 1;
+	events[GET_GAS].range = 200;
+	events[GET_GAS].steps = 1;
+	events[GET_GAS].time = 6;
+	events[GET_GAS].eventpos[0] = vector3df(1834, 0, -380);
+	events[RETURN_TUB].messagenum = 11;
+	events[RETURN_TUB].possloc = 1;
+	events[RETURN_TUB].range = 425;
+	events[RETURN_TUB].steps = 1;
+	events[RETURN_TUB].time = 2;
+	events[RETURN_TUB].eventpos[0] = vector3df(1300, 0, 1524);
+	events[STEAL_VACUUM].messagenum = 12;
+	events[STEAL_VACUUM].possloc = 1;
+	events[STEAL_VACUUM].range = 200;
+	events[STEAL_VACUUM].steps = 1;
+	events[STEAL_VACUUM].time = 1;
+	events[STEAL_VACUUM].eventpos[0] = vector3df(-876, 0, 1550);
+	events[ASSEMBLE_FUEL_PUMP].messagenum = 13;
+	events[ASSEMBLE_FUEL_PUMP].possloc = 1;
+	events[ASSEMBLE_FUEL_PUMP].range = 425;
+	events[ASSEMBLE_FUEL_PUMP].steps = 1;
+	events[ASSEMBLE_FUEL_PUMP].time = 6;
+	events[ASSEMBLE_FUEL_PUMP].eventpos[0] = vector3df(1300, 0, 1524);
+	events[STEAL_STAND].messagenum = 14;
+	events[STEAL_STAND].possloc = 1;
+	events[STEAL_STAND].range = 200;
+	events[STEAL_STAND].steps = 1;
+	events[STEAL_STAND].time = 2;
+	events[STEAL_STAND].eventpos[0] = vector3df(-671, 0, -2000);
+	events[ATTACH_WHEELS].messagenum = 15;
+	events[ATTACH_WHEELS].possloc = 3;
+	events[ATTACH_WHEELS].range = 425;
+	events[ATTACH_WHEELS].steps = 3;
+	events[ATTACH_WHEELS].time = 2;
+	events[ATTACH_WHEELS].eventpos[0] = vector3df(1300, 0, 1524);
+	events[ATTACH_WHEELS].eventpos[1] = vector3df(1300, 0, 1524);
+	events[ATTACH_WHEELS].eventpos[2] = vector3df(1300, 0, 1524);
+	events[STEAL_BED].messagenum = 16;
+	events[STEAL_BED].possloc = 1;
+	events[STEAL_BED].range = 150;
+	events[STEAL_BED].steps = 1;
+	events[STEAL_BED].time = 4;
+	events[STEAL_BED].eventpos[0] = vector3df(-2425, 0, 1561);
+	events[RETURN_BED].messagenum = 17;
+	events[RETURN_BED].possloc = 1;
+	events[RETURN_BED].range = 425;
+	events[RETURN_BED].steps = 1;
+	events[RETURN_BED].time = 1;
+	events[RETURN_BED].eventpos[0] = vector3df(1300, 0, 1524);
+	events[STEAL_SHUTTERS].messagenum = 18;
+	events[STEAL_SHUTTERS].possloc = 10;
+	events[STEAL_SHUTTERS].range = 200;
+	events[STEAL_SHUTTERS].steps = 8;
+	events[STEAL_SHUTTERS].time = 3;
+	events[STEAL_SHUTTERS].eventpos[0] = vector3df(-1680, 0, 580);
+	events[STEAL_SHUTTERS].eventpos[1] = vector3df(-1680, 0, 725);
+	events[STEAL_SHUTTERS].eventpos[2] = vector3df(-1680, 0, 863);
+	events[STEAL_SHUTTERS].eventpos[3] = vector3df(-1680, 0, 990);
+	events[STEAL_SHUTTERS].eventpos[4] = vector3df(-2220, 0, 977);
+	events[STEAL_SHUTTERS].eventpos[5] = vector3df(-2220, 0, 842);
+	events[STEAL_SHUTTERS].eventpos[6] = vector3df(-2220, 0, 637);
+	events[STEAL_SHUTTERS].eventpos[7] = vector3df(-2220, 0, 504);
+	events[ASSEMBLE_PROP].messagenum = 19;
+	events[ASSEMBLE_PROP].possloc = 4;
+	events[ASSEMBLE_PROP].range = 425;
+	events[ASSEMBLE_PROP].steps = 4;
+	events[ASSEMBLE_PROP].time = 3;
+	for(c=0;c<4;c++)
+		events[ASSEMBLE_PROP].eventpos[c] = vector3df(1300, 0, 1524);
+	events[STEAL_GATE].messagenum = 20;
+	events[STEAL_GATE].possloc = 1;
+	events[STEAL_GATE].range = 150;
+	events[STEAL_GATE].steps = 1;
+	events[STEAL_GATE].time = 2;
+	events[STEAL_GATE].eventpos[0] = vector3df(-1690, 0, -258);
+	events[ATTACH_ROTOR].messagenum = 21;
+	events[ATTACH_ROTOR].possloc = 1;
+	events[ATTACH_ROTOR].range = 425;
+	events[ATTACH_ROTOR].steps = 1;
+	events[ATTACH_ROTOR].time = 4;
+	events[ATTACH_ROTOR].eventpos[0] = vector3df(1300, 0, 1524);
+	events[STEAL_CONTROL].messagenum = 22;
+	events[STEAL_CONTROL].possloc = 1;
+	events[STEAL_CONTROL].range = 200;
+	events[STEAL_CONTROL].steps = 1;
+	events[STEAL_CONTROL].time = 4;
+	events[STEAL_CONTROL].eventpos[0] = vector3df(-1425, 0, -318);
+	events[INSTALL_CONTROL].messagenum = 23;
+	events[INSTALL_CONTROL].possloc = 1;
+	events[INSTALL_CONTROL].range = 425;
+	events[INSTALL_CONTROL].steps = 1;
+	events[INSTALL_CONTROL].time = 4;
+	events[INSTALL_CONTROL].eventpos[0] = vector3df(1300, 0, 1524);
+	events[CRANK_UP].messagenum = 24;
+	events[CRANK_UP].possloc = 1;
+	events[CRANK_UP].range = 425;
+	events[CRANK_UP].steps = 1;
+	events[CRANK_UP].time = 10;
+	events[CRANK_UP].eventpos[0] = vector3df(1300, 0, 1524);
+	events[TAKE_OFF].messagenum = 25;
+	events[TAKE_OFF].possloc = 1;
+	events[TAKE_OFF].range = 425;
+	events[TAKE_OFF].steps = 1;
+	events[TAKE_OFF].time = 1;
+	events[TAKE_OFF].eventpos[0] = vector3df(1300, 0, 1524);
+
+	return(*events);
+}
+void eventcheck(Cevents &check, ICameraSceneNode* Camera, float &actiontime, int &gamestep, Cplayer player, f32 fdt)
+{
+	int c, closest, comped = 0;
+	float dist[10];
+	
+	if(check.possloc > 1)
+	{
+		closest = 999;
+		for(c=0;c<check.possloc;c++)
+		{
+			if(check.complete[c] == false)
+			{
+				dist[c] = sqrt(pow(check.eventpos[c].X - Camera->getPosition().X,2) + pow(check.eventpos[c].Z - Camera->getPosition().Z,2));
+				if(closest == 999)
+					closest = c;
+				else
+					if(dist[c] < dist[closest])
+						closest = c;
+			}
+		}
+		if(closest == 999)
+			closest = 0;
+	}
+	else
+	{
+		closest = 0;
+		dist[0] = sqrt(pow(check.eventpos[closest].X - Camera->getPosition().X,2) + pow(check.eventpos[closest].Z - Camera->getPosition().Z,2));
+	}
+	
+	vector3df toplayer =  check.eventpos[closest] - Camera->getPosition(), cenresult, camerahead;
+	float resultmag;
+	camerahead = Camera->getTarget() - Camera->getAbsolutePosition();
+	camerahead.normalize();
+	cenresult = (1000 * camerahead) + toplayer;
+	resultmag = sqrt(cenresult.X * cenresult.X + cenresult.Z * cenresult.Z);
+
+	if(player.is_getting_ass_kicked == false && check.range >= dist[closest] && check.state != COMPLETED && resultmag > 1000)
+	{
+		actiontime += fdt;
+		check.state = DOING;
+	}
+	else
+	{
+		check.state = ACTIVE;
+		actiontime = 0;
+	}
+	if(actiontime >= check.time)
+	{
+		check.complete[closest] = true;
+		
+		check.Eventnode[closest]->setVisible(false);
+		actiontime = 0;
+	}
+	for(c=0;c<check.possloc;c++)
+		if(check.complete[c] == true)
+			comped += 1;
+	cout<< "completed: " << comped << endl;
+	if(comped >= check.steps)
+	{
+		gamestep += 1;
+		check.state = COMPLETED;
+	}
+}
